@@ -2,14 +2,17 @@ import os
 import json
 import httpx
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 API_URL = "https://api.anthropic.com/v1/messages"
+MODEL = "claude-sonnet-4-6"
 
-HEADERS = {
-    "Content-Type": "application/json",
-    "x-api-key": ANTHROPIC_API_KEY,
-    "anthropic-version": "2023-06-01"
-}
+
+def _get_headers() -> dict:
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    return {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+    }
 
 
 async def analyze_message(text: str) -> dict:
@@ -40,22 +43,23 @@ async def analyze_message(text: str) -> dict:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 API_URL,
-                headers=HEADERS,
+                headers=_get_headers(),
                 json={
-                    "model": "claude-sonnet-4-20250514",
+                    "model": MODEL,
                     "max_tokens": 500,
                     "messages": [{"role": "user", "content": prompt}]
                 }
             )
             data = response.json()
+            if "content" not in data:
+                print(f"[AI Label Error] API response: {data}")
+                raise ValueError(f"Unexpected API response: {data}")
             text_result = data["content"][0]["text"].strip()
-            # 清除可能的 markdown
             text_result = text_result.replace("```json", "").replace("```", "").strip()
             return json.loads(text_result)
 
     except Exception as e:
         print(f"[AI Label Error] {e}")
-        # 預設回傳
         return {
             "emotion": "CONFUSION",
             "cognition": "LOGICAL_READY",
@@ -83,14 +87,17 @@ async def analyze_checkin(text: str, known_emotion: str) -> dict:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 API_URL,
-                headers=HEADERS,
+                headers=_get_headers(),
                 json={
-                    "model": "claude-sonnet-4-20250514",
+                    "model": MODEL,
                     "max_tokens": 300,
                     "messages": [{"role": "user", "content": prompt}]
                 }
             )
             data = response.json()
+            if "content" not in data:
+                print(f"[Checkin AI Error] API response: {data}")
+                raise ValueError(f"Unexpected API response: {data}")
             text_result = data["content"][0]["text"].strip()
             text_result = text_result.replace("```json", "").replace("```", "").strip()
             return json.loads(text_result)
