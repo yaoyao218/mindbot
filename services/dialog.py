@@ -73,10 +73,17 @@ async def get_next_reply(session: dict, user_text: str, user_id: str) -> str:
 
     method = session.get("method", "BYRON_KATIE")
     step = session.get("step", 0)
-    core_belief = session.get("core_belief") or user_text
 
     # 更新對話歷史
     session["history"].append({"role": "user", "text": user_text})
+
+    # pre-step：從簽到深度對話進來，先收集核心困擾再開始提問
+    if step == -1:
+        session["core_belief"] = user_text
+        session["step"] = 0
+        step = 0
+
+    core_belief = session.get("core_belief") or user_text
 
     # 選擇方法腳本
     if method == "BYRON_KATIE":
