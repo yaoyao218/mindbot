@@ -1,0 +1,10 @@
+.env
+*.env
+金鑰.env.txt
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.log
+sessions/

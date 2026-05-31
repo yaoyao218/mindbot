@@ -30,14 +30,14 @@ from services.ai_label import analyze_message
 # DB（優先用持久化版，失敗則 fallback 到記憶體版）
 try:
     from services.db_persistent import (
-        get_session, save_session, save_message,
+        get_session, save_session, append_message,
         save_psych_state, count_today_referrals, log_referral,
         save_checkin
     )
     DB_MODE = "persistent"
 except ImportError:
     from services.session import get_session, save_session
-    async def save_message(*a, **kw): pass
+    async def append_message(*a, **kw): pass
     async def save_psych_state(*a, **kw): pass
     async def count_today_referrals(*a, **kw): return 0
     async def log_referral(*a, **kw): pass
@@ -45,8 +45,9 @@ except ImportError:
     DB_MODE = "memory"
 
 CHECKIN_KEYWORDS = ["簽到", "check in", "checkin", "今天狀態"]
-START_KEYWORDS = ["開始", "start", "你好", "hi", "hello", "嗨"]
+START_KEYWORDS = ["開始", "start", "你好", "hi", "hello", "嗨", "哈囉"]
 HELP_KEYWORDS = ["說明", "help", "怎麼用", "功能"]
+STOP_KEYWORDS = ["停止", "結束對話", "不想說了", "先這樣"]
 
 METHOD_MAP = {
     "BYRON_KATIE": bk_reply,
@@ -75,6 +76,18 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         await send_help(reply_token, line_bot_api)
         return
 
+    # ── 停止對話 ────────────────────────────────────────────
+    session_check = await get_session(user_id)
+    if any(kw in text for kw in STOP_KEYWORDS) and session_check.get("in_dialog"):
+        from services.db_persistent import clear_session as clear_db_session
+        try:
+            await clear_db_session(user_id)
+        except Exception:
+            pass
+        msg = "好的，我們先在這裡停下來。\n\n隨時想繼續，或有什麼想說的，都可以傳訊息給我。"
+        await _reply(reply_token, msg, line_bot_api)
+        return
+
     # ── 取得 Session ────────────────────────────────────────
     session = await get_session(user_id)
 
@@ -98,7 +111,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         return
 
     # 儲存用戶訊息
-    await save_message(user_id, "user", text)
+    await append_message(user_id, "user", text)
     session.setdefault("history", [])
     session["history"].append({"role": "user", "text": text})
 
@@ -116,7 +129,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         reply_text = process_response(reply_text, fp_result)
         session["history"].append({"role": "bot", "text": reply_text})
         await save_session(user_id, session)
-        await save_message(user_id, "bot", reply_text)
+        await append_message(user_id, "bot", reply_text)
         await _reply(reply_token, reply_text, line_bot_api)
         return
 
@@ -148,7 +161,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         "alliance_rupture": diagnosis.alliance_rupture,
     }
     session["psych"] = psych_data
-    await save_psych_state(user_id, psych_data)
+    await save_psych_state(user_id, psych_data, total_turn)
 
     # 治療同盟破裂 → 立刻修復，暫停推進
     if diagnosis.should_pause_method and diagnosis.alliance_rupture != "NONE":
@@ -187,7 +200,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         session["step"] = 0
         session["core_belief"] = labels.get("core_belief")
         psych_data.update({"emotion": labels.get("emotion"), "cognition": labels.get("cognition"), "method": suggested})
-        await save_psych_state(user_id, psych_data)
+        await save_psych_state(user_id, psych_data, total_turn)
     else:
         # 對話進行中：檢查是否需要切換方法
         current_method = session.get("method", "SQT")
@@ -231,7 +244,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     # 回覆並儲存
     session["history"].append({"role": "bot", "text": reply_text})
     await save_session(user_id, session)
-    await save_message(user_id, "bot", reply_text)
+    await append_message(user_id, "bot", reply_text)
     await _reply(reply_token, reply_text, line_bot_api)
 
 

@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>心事日記</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Noto+Sans+TC:wght@300;400&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════
+   VARIABLES & RESET
+═══════════════════════════════════════════════ */
+:root {
+  --bg:         #0f1410;
+  --bg-2:       #161c18;
+  --bg-3:       #1d2620;
+  --bg-4:       #243028;
+  --border:     rgba(255,255,255,.07);
+  --border-2:   rgba(255,255,255,.12);
+  --gold:       #c9a84c;
+  --gold-lt:    #e8c97a;
+  --gold-dim:   rgba(201,168,76,.3);
+  --green:      #4a7c59;
+  --green-lt:   #6aaa7d;
+  --text:       #e8e0d0;
+  --text-soft:  #a89880;
+  --text-faint: #6b5d4f;
+  --blush:      #b87a7a;
+  --crisis:     #c0392b;
+  --r:          10px;
+  --sidebar-w:  240px;
+  --transition: .25s cubic-bezier(.4,0,.2,1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 16px; }
+
+body {
+  font-family: 'Noto Sans TC', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ═══════════════════════════════════════════════
+   AUTH SCREEN
+═══════════════════════════════════════════════ */
+#auth-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(74,124,89,.15) 0%, transparent 70%),
+    var(--bg);
+  padding: 40px 24px;
+}
+
+.auth-inner {
+  text-align: center;
+  max-width: 400px;
+  animation: fadeUp .9s ease both;
+}
+
+.auth-moon {
+  font-size: 56px;
+  margin-bottom: 32px;
+  display: block;
+  filter: drop-shadow(0 0 24px rgba(201,168,76,.4));
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+.auth-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(38px, 8vw, 56px);
+  font-weight: 300;
+  letter-spacing: .2em;
+  color: var(--gold-lt);
+  margin-bottom: 12px;
+  line-height: 1;
+}
+
+.auth-sub {
+  font-size: 13px;
+  color: var(--text-faint);
+  letter-spacing: .12em;
+  margin-bottom: 56px;
+  line-height: 2;
+}
+
+.auth-divider {
+  width: 40px; height: 1px;
+  background: var(--gold-dim);
+  margin: 0 auto 56px;
+}
+
+.line-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: #06C755;
+  color: #fff;
+  padding: 16px 36px;
+  border-radius: 50px;
+  font-size: 15px;
+  letter-spacing: .08em;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition);
+  box-shadow: 0 4px 24px rgba(6,199,85,.25);
+  font-family: 'Noto Sans TC', sans-serif;
+}
+.line-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 32px rgba(6,199,85,.35);
+}
+
+.auth-note {
+  margin-top: 32px;
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 2;
+  letter-spacing: .06em;
+}
+
+/* ═══════════════════════════════════════════════
+   APP LAYOUT
+═══════════════════════════════════════════════ */
+#app-screen { display: none; min-height: 100vh; }
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0;
+  height: 100vh;
+  z-index: 50;
+  transition: transform var(--transition);
+}
+
+.sidebar-logo {
+  padding: 32px 24px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo-moon { font-size: 20px; margin-right: 8px; }
+
+.logo-text {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: .15em;
+  color: var(--gold-lt);
+}
+
+.logo-sub {
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: .1em;
+  margin-top: 4px;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 20px 12px;
+  overflow-y: auto;
+}
+
+.nav-section-label {
+  font-size: 9px;
+  letter-spacing: .2em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  padding: 0 12px;
+  margin: 20px 0 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  font-size: 14px;
+  color: var(--text-soft);
+  letter-spacing: .04em;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+.nav-item:hover { background: var(--bg-3); color: var(--text); }
+.nav-item.active { background: var(--bg-4); color: var(--gold-lt); }
+.nav-item.active .nav-icon { color: var(--gold); }
+.nav-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+
+.sidebar-footer {
+  padding: 16px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-3);
+}
+.user-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--gold-dim);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.user-name { font-size: 13px; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-sync { font-size: 10px; color: var(--text-faint); }
+.logout-btn { font-size: 12px; color: var(--text-faint); cursor: pointer; border: none; background: none; padding: 4px; }
+.logout-btn:hover { color: var(--blush); }
+
+/* ── Main Content ── */
+.main-content {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  min-height: 100vh;
+}
+
+/* ── Mobile Header ── */
+.mobile-header {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+.mobile-logo {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  letter-spacing: .15em;
+  color: var(--gold-lt);
+}
+.hamburger {
+  width: 36px; height: 36px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--bg-3);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text-soft);
+}
+
+/* Mobile sidebar overlay */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 45;
+}
+
+/* ═══════════════════════════════════════════════
+   PAGE CONTENT
+═══════════════════════════════════════════════ */
+.page {
+  display: none;
+  padding: 40px;
+  max-width: 900px;
+  animation: fadeUp .5s ease both;
+}
+.page.active { display: block; }
+
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(12px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+/* Page Header */
+.page-header { margin-bottom: 36px; }
+.page-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 300;
+  color: var(--gold-lt);
+  letter-spacing: .1em;
+  margin-bottom: 6px;
+}
+.page-sub {
+  font-size: 13px;
+  color: var(--text-faint);
+  letter-spacing: .06em;
+}
+
+/* ── Cards ── */
+.card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 24px;
+  margin-bottom: 20px;
+  transition: border-color var(--transition);
+}
+.card:hover { border-color: var(--border-2); }
+
+.card-title {
+  font-size: 11px;
+  letter-spacing: .18em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title::before {
+  content: '';
+  width: 3px; height: 12px;
+  background: var(--gold);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Grid */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+/* Stat Pills */
+.stat-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 20px;
+  text-align: center;
+}
+.stat-val {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 40px;
+  font-weight: 300;
+  color: var(--gold-lt);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.stat-unit { font-size: 14px; color: var(--text-soft); margin-left: 4px; }
+.stat-label { font-size: 11px; color: var(--text-faint); letter-spacing: .08em; }
+
+/* Tags */
+.tag {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--text-soft);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  letter-spacing: .04em;
+}
+.tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Summary text */
+.summary-text {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 15px;
+  line-height: 1.9;
+  color: var(--text);
+}
+
+/* Growth note */
+.growth-note {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 17px;
+  color: var(--green-lt);
+  line-height: 1.7;
+  padding: 16px 20px;
+  border-left: 2px solid var(--green);
+  background: rgba(74,124,89,.06);
+  border-radius: 0 8px 8px 0;
+}
+
+/* ── Canvas Charts ── */
+.chart-container { position: relative; width: 100%; }
+canvas { display: block; width: 100% !important; }
+
+/* ── Arousal Line Chart ── */
+#arousal-canvas { height: 120px !important; }
+#trend-canvas   { height: 160px !important; }
+
+/* ── Emotion Bars ── */
+.emotion-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 10px;
+}
+.emotion-label {
+  font-size: 12px; color: var(--text-soft);
+  width: 80px; flex-shrink: 0; letter-spacing: .03em;
+}
+.bar-track {
+  flex: 1; height: 6px;
+  background: var(--bg-4);
+  border-radius: 3px; overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--green), var(--green-lt));
+  transition: width .8s cubic-bezier(.4,0,.2,1);
+}
+.bar-count { font-size: 11px; color: var(--text-faint); width: 24px; text-align: right; }
+
+/* ── Week List ── */
+.week-item {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 20px 24px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition), transform var(--transition);
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.week-item:hover {
+  border-color: var(--gold-dim);
+  background: var(--bg-3);
+  transform: translateX(4px);
+}
+.week-num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 13px;
+  color: var(--gold);
+  letter-spacing: .1em;
+  flex-shrink: 0;
+  padding-top: 2px;
+  min-width: 80px;
+}
+.week-body { flex: 1; min-width: 0; }
+.week-range { font-size: 11px; color: var(--text-faint); letter-spacing: .04em; margin-bottom: 6px; }
+.week-summary { font-size: 14px; color: var(--text-soft); line-height: 1.6; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.week-meta { font-size: 11px; color: var(--text-faint); }
+.week-arrow { color: var(--text-faint); font-size: 16px; padding-top: 4px; flex-shrink: 0; transition: transform var(--transition); }
+.week-item:hover .week-arrow { transform: translateX(4px); color: var(--gold); }
+
+/* ── Detail View ── */
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.back-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 16px;
+  transition: background var(--transition), color var(--transition);
+  flex-shrink: 0;
+}
+.back-btn:hover { background: var(--bg-4); color: var(--gold); }
+
+/* Conversation Log */
+.conv-log { max-height: 400px; overflow-y: auto; }
+.conv-msg {
+  margin-bottom: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.conv-msg.bot { flex-direction: row-reverse; }
+.msg-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; flex-shrink: 0;
+}
+.conv-msg.user .msg-avatar { background: var(--bg-4); color: var(--text-soft); }
+.conv-msg.bot  .msg-avatar { background: rgba(74,124,89,.3); color: var(--green-lt); }
+.msg-bubble {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.conv-msg.user .msg-bubble { background: var(--bg-3); border: 1px solid var(--border); color: var(--text); }
+.conv-msg.bot  .msg-bubble { background: rgba(74,124,89,.12); border: 1px solid rgba(74,124,89,.2); color: var(--text-soft); }
+.msg-time { font-size: 10px; color: var(--text-faint); margin-top: 4px; }
+
+/* Scroll bar */
+.conv-log::-webkit-scrollbar { width: 4px; }
+.conv-log::-webkit-scrollbar-track { background: transparent; }
+.conv-log::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 2px; }
+
+/* ── Trends ── */
+.trend-stat-row {
+  display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.trend-stat {
+  flex: 1; min-width: 100px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px;
+  text-align: center;
+}
+.trend-num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 32px; font-weight: 300;
+  color: var(--gold-lt); line-height: 1;
+}
+.trend-lbl { font-size: 11px; color: var(--text-faint); margin-top: 4px; letter-spacing: .06em; }
+
+/* Ranking */
+.rank-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rank-item:last-child { border-bottom: none; }
+.rank-num { font-family: 'Cormorant Garamond', serif; font-size: 20px; color: var(--gold-dim); width: 24px; }
+.rank-name { flex: 1; font-size: 14px; color: var(--text-soft); }
+.rank-bar-wrap { width: 100px; }
+.rank-count { font-size: 12px; color: var(--text-faint); width: 32px; text-align: right; }
+
+/* ── Settings ── */
+.settings-group { margin-bottom: 32px; }
+.settings-group-title {
+  font-size: 10px; letter-spacing: .2em; color: var(--gold);
+  text-transform: uppercase; margin-bottom: 12px;
+}
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-label { font-size: 14px; color: var(--text); }
+.settings-sub { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+.settings-action {
+  font-size: 13px; color: var(--text-soft);
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 16px;
+  cursor: pointer; transition: border-color var(--transition);
+  font-family: 'Noto Sans TC', sans-serif;
+  white-space: nowrap;
+}
+.settings-action:hover { border-color: var(--gold-dim); color: var(--gold-lt); }
+.settings-action.danger { color: var(--blush); }
+.settings-action.danger:hover { border-color: var(--blush); }
+
+/* Crisis badge */
+.crisis-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(192,57,43,.12);
+  border: 1px solid rgba(192,57,43,.3);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px; color: #e07060;
+}
+
+/* Sync status */
+.sync-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  background: rgba(74,124,89,.08);
+  border: 1px solid rgba(74,124,89,.2);
+  border-radius: 8px;
+  font-size: 12px; color: var(--green-lt);
+  margin-bottom: 24px;
+  animation: fadeUp .4s ease both;
+}
+.sync-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green-lt);
+  animation: pulse 2s ease infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* Offline banner */
+#offline-banner {
+  display: none;
+  background: rgba(201,168,76,.1);
+  border-bottom: 1px solid var(--gold-dim);
+  padding: 10px 40px;
+  font-size: 12px; color: var(--gold);
+  letter-spacing: .06em;
+}
+#offline-banner.show { display: block; }
+
+/* Toast */
+#toast {
+  position: fixed; bottom: 32px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-3); border: 1px solid var(--border-2);
+  color: var(--text); padding: 10px 24px; border-radius: 50px;
+  font-size: 13px; letter-spacing: .04em;
+  opacity: 0; transition: opacity .3s, transform .3s;
+  pointer-events: none; z-index: 200; white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0,0,0,.4);
+  }
+  .sidebar-overlay.show { display: block; }
+  .mobile-header { display: flex; }
+  .main-content { margin-left: 0; }
+  .page { padding: 20px 16px 80px; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr; }
+  #offline-banner { padding: 10px 16px; }
+  .week-item { flex-wrap: wrap; gap: 12px; }
+  .week-num { min-width: auto; }
+}
+
+@media (max-width: 400px) {
+  .grid-3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══ AUTH ══════════════════════════════════════ -->
+<div id="auth-screen">
+  <div class="auth-inner">
+    <span class="auth-moon">🌙</span>
+    <h1 class="auth-title">心事日記</h1>
+    <div class="auth-divider"></div>
+    <p class="auth-sub">你的私人情緒回顧空間<br>資料只存在你的裝置上</p>
+    <a id="line-login-btn" class="line-btn" href="#" onclick="enterApp(); return false;">
+      <svg width="20" height="20" viewBox="0 0 48 48" fill="white">
+        <path d="M24 4C12.95 4 4 11.82 4 21.4c0 6.18 4.1 11.6 10.3 14.74L12 44l9.32-4.9c.87.12 1.76.19 2.68.19 11.05 0 20-7.82 20-17.4C44 11.82 35.05 4 24 4z"/>
+      </svg>
+      使用 LINE 登入
+    </a>
+    <p class="auth-note">登入後資料同步至此裝置<br>不會上傳至任何雲端伺服器</p>
+  </div>
+</div>
+
+<!-- ══ APP ════════════════════════════════════════ -->
+<div id="app-screen">
+  <div id="offline-banner">⚠ 離線中・顯示本地儲存資料</div>
+
+  <div class="app-layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <div><span class="logo-moon">🌙</span><span class="logo-text">心事日記</span></div>
+        <div class="logo-sub">MindBot Journal</div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">主要</div>
+        <button class="nav-item active" onclick="goPage('snapshot')">
+          <span class="nav-icon">✦</span> 本週快照
+        </button>
+        <button class="nav-item" onclick="goPage('weeks')">
+          <span class="nav-icon">📖</span> 週報列表
+        </button>
+        <button class="nav-item" onclick="goPage('trends')">
+          <span class="nav-icon">〰</span> 情緒趨勢
+        </button>
+
+        <div class="nav-section-label">帳號</div>
+        <button class="nav-item" onclick="goPage('settings')">
+          <span class="nav-icon">⚙</span> 資料管理
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="user-avatar">🙂</div>
+          <div>
+            <div class="user-name">耀耀</div>
+            <div class="user-sync">最後同步 10 分鐘前</div>
+          </div>
+          <button class="logout-btn" onclick="logout()" title="登出">⏻</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <!-- Main -->
+    <main class="main-content">
+
+      <!-- Mobile header -->
+      <div class="mobile-header">
+        <span class="mobile-logo">心事日記</span>
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+      </div>
+
+      <!-- ── PAGE: SNAPSHOT ── -->
+      <div class="page active" id="page-snapshot">
+        <div class="page-header">
+          <h1 class="page-title">本週快照</h1>
+          <p class="page-sub">2025-W20 ・ 5月12日 ～ 5月18日</p>
+        </div>
+
+        <div class="sync-bar">
+          <div class="sync-dot"></div>
+          已同步・新增 3 則對話紀錄
+        </div>
+
+        <!-- Stats Row -->
+        <div class="grid-3" style="margin-bottom:20px">
+          <div class="stat-card">
+            <div class="stat-val"><span id="snap-arousal">—</span><span class="stat-unit" style="font-size:16px"> / 5</span></div>
+            <div class="stat-label">平均情緒強度</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val"><span id="snap-turns">—</span></div>
+            <div class="stat-label">則對話</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val"><span id="snap-days">—</span></div>
+            <div class="stat-label">天有記錄</div>
+          </div>
+        </div>
+
+        <!-- Arousal Chart -->
+        <div class="card">
+          <div class="card-title">情緒強度曲線</div>
+          <div class="chart-container">
+            <canvas id="arousal-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Summary + Growth -->
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">本週摘要</div>
+            <p class="summary-text" id="snap-summary"></p>
+            <div class="tag-row" style="margin-top:16px" id="snap-tags"></div>
+          </div>
+          <div class="card" style="display:flex;flex-direction:column;gap:16px">
+            <div>
+              <div class="card-title">成長觀察</div>
+              <div class="growth-note" id="snap-growth"></div>
+            </div>
+            <div>
+              <div class="card-title">情緒分佈</div>
+              <div id="emotion-bars-snapshot"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PAGE: WEEKS ── -->
+      <div class="page" id="page-weeks">
+        <div class="page-header">
+          <h1 class="page-title">週報列表</h1>
+          <p class="page-sub">共 8 份週報</p>
+        </div>
+
+        <div id="week-list"></div>
+      </div>
+
+      <!-- ── PAGE: DETAIL ── -->
+      <div class="page" id="page-detail">
+        <div class="detail-header">
+          <button class="back-btn" onclick="goPage('weeks')">←</button>
+          <div>
+            <div class="page-title" id="detail-title" style="font-size:28px">2025-W19</div>
+            <div class="page-sub">5月5日 ～ 5月11日</div>
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-bottom:20px">
+          <div class="stat-card"><div class="stat-val"><span id="detail-arousal">—</span></div><div class="stat-label">平均情緒強度</div></div>
+          <div class="stat-card"><div class="stat-val"><span id="detail-turns">—</span></div><div class="stat-label">則對話</div></div>
+          <div class="stat-card"><div class="stat-val"><span id="detail-days">—</span></div><div class="stat-label">天有記錄</div></div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-title">情緒強度曲線</div>
+          <canvas id="detail-canvas" style="height:100px!important"></canvas>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <div class="card">
+              <div class="card-title">週報摘要</div>
+              <p class="summary-text" id="detail-summary"></p>
+            </div>
+            <div class="card">
+              <div class="card-title">臨床脈絡</div>
+              <div style="display:grid;gap:12px">
+                <div>
+                  <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;letter-spacing:.08em">核心信念</div>
+                  <div style="font-size:14px;color:var(--text-soft)" id="detail-belief">—</div>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;letter-spacing:.08em">行為模式</div>
+                  <div style="font-size:14px;color:var(--text-soft)" id="detail-pattern">—</div>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;letter-spacing:.08em">未竟事宜</div>
+                  <div style="font-size:14px;color:var(--text-soft)" id="detail-issues">—</div>
+                </div>
+                <div>
+                  <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;letter-spacing:.08em">治療同盟</div>
+                  <div style="font-size:14px;color:var(--green-lt)" id="detail-alliance">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <div class="card-title">成長觀察</div>
+              <div class="growth-note" id="detail-growth"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">對話紀錄</div>
+              <div class="conv-log" id="conv-log"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PAGE: TRENDS ── -->
+      <div class="page" id="page-trends">
+        <div class="page-header">
+          <h1 class="page-title">情緒趨勢</h1>
+          <p class="page-sub">過去 8 週的長期視角</p>
+        </div>
+
+        <div class="trend-stat-row">
+          <div class="trend-stat"><div class="trend-num" id="trend-avg">—</div><div class="trend-lbl">週平均強度</div></div>
+          <div class="trend-stat"><div class="trend-num" id="trend-weeks">—</div><div class="trend-lbl">週報份數</div></div>
+          <div class="trend-stat"><div class="trend-num" id="trend-turns">—</div><div class="trend-lbl">總對話則數</div></div>
+          <div class="trend-stat"><div class="trend-num" id="trend-dir">—</div><div class="trend-lbl">強度趨勢</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">平均情緒強度趨勢（8 週）</div>
+          <canvas id="trend-canvas"></canvas>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">常見情緒標籤</div>
+            <div id="emotion-ranking"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">常見主題</div>
+            <div id="theme-ranking"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PAGE: SETTINGS ── -->
+      <div class="page" id="page-settings">
+        <div class="page-header">
+          <h1 class="page-title">資料管理</h1>
+          <p class="page-sub">帳號、隱私與資料設定</p>
+        </div>
+
+        <div class="card">
+          <div class="settings-group">
+            <div class="settings-group-title">帳號</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">LINE 帳號</div>
+                <div class="settings-sub" id="settings-name">載入中…</div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">最後同步</div>
+                <div class="settings-sub" id="settings-lastsync">—</div>
+              </div>
+              <button class="settings-action" onclick="Sync.run(true)">重新同步</button>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">資料</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">匯出所有資料</div>
+                <div class="settings-sub">週報 + 對話紀錄打包為 JSON</div>
+              </div>
+              <button class="settings-action" onclick="exportData()">📤 匯出</button>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">匯入資料</div>
+                <div class="settings-sub">從另一台裝置還原</div>
+              </div>
+              <button class="settings-action" onclick="document.getElementById('import-file').click()">📥 匯入</button>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">隱私</div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">資料保留期</div>
+                <div class="settings-sub">一週未登入後自動刪除雲端原始資料</div>
+              </div>
+              <span style="font-size:12px;color:var(--text-faint)">7 天</span>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">危機豁免狀態</div>
+                <div class="settings-sub">帳號曾觸發危機偵測，保留期延長至 30 天</div>
+              </div>
+              <span class="crisis-badge">⚠ 保護中</span>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">刪除所有資料</div>
+                <div class="settings-sub">無法復原，本地與雲端同步清除</div>
+              </div>
+              <button class="settings-action danger" onclick="deleteAllData()">刪除</button>
+            </div>
+          </div>
+
+          <div style="padding-top:8px;text-align:right">
+            <button class="settings-action" onclick="logout()">登出</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this.files[0])">
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ═══════════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════════ */
+const CFG = {
+  LINE_CLIENT_ID: '__LINE_LOGIN_CHANNEL_ID__',   // 部署時替換
+  REDIRECT_URI:   location.origin + '/callback',
+  API:            '',   // same-origin
+};
+
+const EMOTION_LABEL = {
+  ACUTE_DISTRESS:'急性痛苦', RUMINATION:'反芻思考',
+  SELF_BLAME:'自我批評',     CONFUSION:'困惑迷茫',
+  CALM_REFLECTIVE:'冷靜反思',
+};
+
+/* ═══════════════════════════════════════════════
+   IndexedDB
+═══════════════════════════════════════════════ */
+const IDB = (() => {
+  let db = null;
+  function open() {
+    if (db) return Promise.resolve(db);
+    return new Promise((res, rej) => {
+      const req = indexedDB.open('mindbot', 2);
+      req.onupgradeneeded = e => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains('weekly')) {
+          const s = d.createObjectStore('weekly', { keyPath: 'week_id' });
+          s.createIndex('user_id', 'user_id');
+        }
+        if (!d.objectStoreNames.contains('conversations')) {
+          d.createObjectStore('conversations', { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      req.onsuccess = e => { db = e.target.result; res(db); };
+      req.onerror = () => rej(req.error);
+    });
+  }
+  async function put(store, obj) {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const r = d.transaction(store, 'readwrite').objectStore(store).put(obj);
+      r.onsuccess = () => res(r.result);
+      r.onerror   = () => rej(r.error);
+    });
+  }
+  async function getAll(store) {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const r = d.transaction(store, 'readonly').objectStore(store).getAll();
+      r.onsuccess = () => res(r.result);
+      r.onerror   = () => rej(r.error);
+    });
+  }
+  async function getOne(store, key) {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const r = d.transaction(store, 'readonly').objectStore(store).get(key);
+      r.onsuccess = () => res(r.result);
+      r.onerror   = () => rej(r.error);
+    });
+  }
+  async function clearStore(store) {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const r = d.transaction(store, 'readwrite').objectStore(store).clear();
+      r.onsuccess = res;
+      r.onerror   = () => rej(r.error);
+    });
+  }
+  async function lastWeekId() {
+    const all = await getAll('weekly');
+    if (!all.length) return null;
+    return all.map(r => r.week_id).sort().at(-1);
+  }
+  return { open, put, getAll, getOne, clearStore, lastWeekId };
+})();
+
+/* ═══════════════════════════════════════════════
+   AUTH
+═══════════════════════════════════════════════ */
+const Auth = {
+  getToken:  () => sessionStorage.getItem('mb_token'),
+  getUserId: () => sessionStorage.getItem('mb_uid'),
+  getName:   () => sessionStorage.getItem('mb_name') || '用戶',
+  set(token, uid, name) {
+    sessionStorage.setItem('mb_token', token);
+    sessionStorage.setItem('mb_uid',   uid);
+    sessionStorage.setItem('mb_name',  name || '用戶');
+  },
+  clear() {
+    ['mb_token','mb_uid','mb_name'].forEach(k => sessionStorage.removeItem(k));
+  },
+  buildLineURL() {
+    const state = crypto.randomUUID();
+    sessionStorage.setItem('oauth_state', state);
+    return 'https://access.line.me/oauth2/v2.1/authorize?' + new URLSearchParams({
+      response_type: 'code',
+      client_id:     CFG.LINE_CLIENT_ID,
+      redirect_uri:  CFG.REDIRECT_URI,
+      state,
+      scope:         'profile openid',
+    });
+  },
+};
+
+/* ═══════════════════════════════════════════════
+   API CLIENT
+═══════════════════════════════════════════════ */
+async function apiFetch(path, opts = {}) {
+  const token = Auth.getToken();
+  const res = await fetch(CFG.API + path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...opts.headers,
+    },
+  });
+  if (!res.ok) throw new Error(`${res.status} ${path}`);
+  return res.json();
+}
+
+/* ═══════════════════════════════════════════════
+   SYNC
+═══════════════════════════════════════════════ */
+const Sync = {
+  _syncing: false,
+
+  async run(showBar = true) {
+    if (this._syncing || !navigator.onLine || !Auth.getToken()) return;
+    this._syncing = true;
+    if (showBar) setSyncBar('同步中…', true);
+
+    try {
+      // 1. 增量拉取週報
+      const lastId  = await IDB.lastWeekId();
+      const url     = '/api/sync/weekly' + (lastId ? `?since=${lastId}` : '');
+      const { reports = [], count = 0 } = await apiFetch(url);
+      for (const r of reports) await IDB.put('weekly', r);
+
+      // 2. 拉取對話緩衝
+      const { messages = [] } = await apiFetch('/api/sync/conversations');
+      for (const m of messages) await IDB.put('conversations', m);
+
+      const now = new Date().toLocaleTimeString('zh-Hant', { hour:'2-digit', minute:'2-digit' });
+      const msg = count > 0 ? `已同步 ${count} 份新週報・${now}` : `最後同步：${now}`;
+      setSyncBar(msg, false);
+      if (count > 0) showToast(`${count} 份新週報已整理好`);
+
+      // 更新頁面
+      await refreshCurrentPage();
+    } catch (e) {
+      console.error('[sync]', e);
+      setSyncBar('同步失敗・顯示本地資料', false);
+    } finally {
+      this._syncing = false;
+    }
+  },
+};
+
+/* ═══════════════════════════════════════════════
+   DATA LAYER（從 IndexedDB 讀取並計算）
+═══════════════════════════════════════════════ */
+const Data = {
+  // 所有週報，由新到舊
+  async weeks() {
+    const all = await IDB.getAll('weekly');
+    return all.sort((a, b) => b.week_id.localeCompare(a.week_id));
+  },
+
+  // 單週資料
+  async week(weekId) {
+    return IDB.getOne('weekly', weekId);
+  },
+
+  // 最新一週
+  async latestWeek() {
+    const all = await this.weeks();
+    return all[0] || null;
+  },
+
+  // 跨週趨勢統計
+  async trends() {
+    const weeks = await this.weeks();
+    if (!weeks.length) return null;
+
+    const avgArousals = weeks.map(w => w.stats?.avg_arousal || 0).reverse();
+    const labels      = weeks.map(w => w.week_id.slice(-3)).reverse();
+
+    // 合併情緒計數
+    const emotionTotals = {};
+    const themeTotals   = {};
+    let totalTurns = 0;
+
+    for (const w of weeks) {
+      totalTurns += w.raw_count || 0;
+      const ec = w.stats?.emotion_counts || {};
+      for (const [k, v] of Object.entries(ec)) {
+        emotionTotals[k] = (emotionTotals[k] || 0) + v;
+      }
+      for (const t of (w.themes || [])) {
+        themeTotals[t] = (themeTotals[t] || 0) + 1;
+      }
+    }
+
+    const toRanked = obj => Object.entries(obj)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const overallAvg = avgArousals.length
+      ? (avgArousals.reduce((s, v) => s + v, 0) / avgArousals.length).toFixed(1)
+      : '—';
+
+    const trend = avgArousals.length >= 2
+      ? (avgArousals.at(-1) < avgArousals[0] ? '↓' : '↑')
+      : '—';
+
+    return {
+      weeks, avgArousals, labels, totalTurns,
+      overallAvg, trend,
+      weekCount:      weeks.length,
+      emotionRanking: toRanked(emotionTotals).map(e => ({ ...e, name: EMOTION_LABEL[e.name] || e.name })),
+      themeRanking:   toRanked(themeTotals),
+    };
+  },
+
+  // 單週對話紀錄（來自 conversations store，篩選該週日期範圍）
+  async conversations(week) {
+    const all   = await IDB.getAll('conversations');
+    const start = new Date(week.start + 'T00:00:00');
+    const end   = new Date(week.end   + 'T23:59:59');
+    return all
+      .filter(m => {
+        const t = new Date(m.created_at);
+        return t >= start && t <= end;
+      })
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  },
+};
+
+/* ═══════════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════════ */
+let currentPage   = 'snapshot';
+let currentWeekId = null;
+
+function goPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.textContent.includes(pageLabel(page))) n.classList.add('active');
+  });
+  currentPage = page;
+  closeSidebar();
+  refreshCurrentPage();
+}
+
+function pageLabel(p) {
+  return { snapshot:'本週快照', weeks:'週報列表', trends:'情緒趨勢', settings:'資料管理' }[p] || '';
+}
+
+async function openDetail(weekId) {
+  currentWeekId = weekId;
+  document.getElementById('detail-title').textContent = weekId;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-detail').classList.add('active');
+  currentPage = 'detail';
+  closeSidebar();
+  await renderDetail(weekId);
+}
+
+async function refreshCurrentPage() {
+  if (currentPage === 'snapshot') await renderSnapshot();
+  if (currentPage === 'weeks')    await renderWeekList();
+  if (currentPage === 'trends')   await renderTrends();
+  if (currentPage === 'detail' && currentWeekId) await renderDetail(currentWeekId);
+  if (currentPage === 'settings') renderSettings();
+}
+
+/* ═══════════════════════════════════════════════
+   RENDER: SNAPSHOT
+═══════════════════════════════════════════════ */
+async function renderSnapshot() {
+  const w = await Data.latestWeek();
+  if (!w) { renderEmptySnapshot(); return; }
+
+  const s = w.stats || {};
+
+  // Header
+  document.querySelector('#page-snapshot .page-sub').textContent =
+    `${w.week_id} ・ ${w.start} ～ ${w.end}`;
+
+  // Stats
+  setEl('snap-arousal', s.avg_arousal?.toFixed(1) ?? '—');
+  setEl('snap-turns',   w.raw_count ?? '—');
+  setEl('snap-days',    Object.keys(s.daily_counts || {}).length || '—');
+
+  // Text
+  setEl('snap-summary', w.summary || '');
+  setEl('snap-growth',  w.growth_note || '');
+
+  // Tags
+  const tagRow = document.getElementById('snap-tags');
+  if (tagRow) tagRow.innerHTML = (w.themes || []).map(t => `<span class="tag">${t}</span>`).join('');
+
+  // Charts（defer raf）
+  requestAnimationFrame(() => {
+    const curve = (s.arousal_curve || []).map(p => p.v);
+    if (curve.length >= 2) {
+      drawLineChart('arousal-canvas', curve, '#4a7c59', null, 1, 5);
+    }
+    const emotionData = Object.entries(s.emotion_counts || {})
+      .map(([k, v]) => ({ name: EMOTION_LABEL[k] || k, count: v }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4);
+    if (emotionData.length) drawEmotionBars('emotion-bars-snapshot', emotionData);
+  });
+}
+
+function renderEmptySnapshot() {
+  document.querySelector('#page-snapshot .page-sub').textContent = '尚無資料';
+  ['snap-arousal','snap-turns','snap-days'].forEach(id => setEl(id, '—'));
+  setEl('snap-summary', '還沒有週報，繼續使用 LINE Bot 對話後，每週自動整理。');
+  setEl('snap-growth', '');
+}
+
+/* ═══════════════════════════════════════════════
+   RENDER: WEEK LIST
+═══════════════════════════════════════════════ */
+async function renderWeekList() {
+  const weeks = await Data.weeks();
+  const container = document.getElementById('week-list');
+
+  document.querySelector('#page-weeks .page-sub').textContent =
+    `共 ${weeks.length} 份週報`;
+
+  if (!weeks.length) {
+    container.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-faint);font-size:14px;line-height:1.8">還沒有週報<br>每週自動整理，下次登入可查看</div>`;
+    return;
+  }
+
+  container.innerHTML = weeks.map(w => {
+    const s    = w.stats || {};
+    const avg  = s.avg_arousal?.toFixed(1) ?? '—';
+    const tags = (w.themes || []).map(t => `<span class="tag">${t}</span>`).join('');
+    return `
+    <div class="week-item" onclick="openDetail('${w.week_id}')">
+      <div class="week-num">${w.week_id}</div>
+      <div class="week-body">
+        <div class="week-range">${w.start} ～ ${w.end}</div>
+        <div class="week-summary">${w.summary || ''}</div>
+        <div class="tag-row" style="margin-bottom:8px">${tags}</div>
+        <div class="week-meta">平均強度 ${avg} ・ ${w.raw_count || 0} 則對話 ・ ${Object.keys(s.daily_counts||{}).length} 天</div>
+      </div>
+      <div class="week-arrow">→</div>
+    </div>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════
+   RENDER: DETAIL
+═══════════════════════════════════════════════ */
+async function renderDetail(weekId) {
+  const w = await Data.week(weekId);
+  if (!w) return;
+
+  const s = w.stats || {};
+  document.querySelector('#page-detail .page-sub').textContent =
+    `${w.start} ～ ${w.end}`;
+
+  // Stats
+  setEl('detail-arousal', s.avg_arousal?.toFixed(1) ?? '—');
+  setEl('detail-turns',   w.raw_count ?? '—');
+  setEl('detail-days',    Object.keys(s.daily_counts || {}).length || '—');
+
+  // Text
+  setEl('detail-summary',  w.summary || '');
+  setEl('detail-growth',   w.growth_note || '');
+  setEl('detail-belief',   w.stats?.clinical_core_belief || '—');
+  setEl('detail-pattern',  w.stats?.behavioral_pattern   || '—');
+  setEl('detail-issues',   w.stats?.unresolved_issues    || '—');
+  setEl('detail-alliance', w.stats?.alliance_history     || '—');
+
+  // Chart
+  requestAnimationFrame(() => {
+    const curve = (s.arousal_curve || []).map(p => p.v);
+    if (curve.length >= 2) {
+      drawLineChart('detail-canvas', curve, '#c9a84c', null, 1, 5);
+    }
+  });
+
+  // Conversations
+  await renderConvLog(w);
+}
+
+async function renderConvLog(week) {
+  const log  = document.getElementById('conv-log');
+  const convs = await Data.conversations(week);
+
+  if (!convs.length) {
+    log.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-faint);font-size:13px">本週對話紀錄尚未同步至本機</div>`;
+    return;
+  }
+
+  log.innerHTML = convs.map(m => {
+    const time = new Date(m.created_at).toLocaleTimeString('zh-Hant', { hour:'2-digit', minute:'2-digit' });
+    return `
+    <div class="conv-msg ${m.role}">
+      <div class="msg-avatar">${m.role === 'user' ? '🙂' : '🌙'}</div>
+      <div>
+        <div class="msg-bubble">${escHtml(m.content)}</div>
+        <div class="msg-time">${time}</div>
+      </div>
+    </div>`;
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+/* ═══════════════════════════════════════════════
+   RENDER: TRENDS
+═══════════════════════════════════════════════ */
+async function renderTrends() {
+  const t = await Data.trends();
+
+  if (!t || !t.weeks.length) {
+    document.querySelector('#page-trends .page-sub').textContent = '尚無資料';
+    return;
+  }
+
+  document.querySelector('#page-trends .page-sub').textContent =
+    `過去 ${t.weekCount} 週的長期視角`;
+
+  setEl('trend-avg',    t.overallAvg);
+  setEl('trend-weeks',  t.weekCount);
+  setEl('trend-turns',  t.totalTurns);
+  setEl('trend-dir',    t.trend);
+
+  requestAnimationFrame(() => {
+    if (t.avgArousals.length >= 2) {
+      drawLineChart('trend-canvas', t.avgArousals, '#c9a84c', t.labels, 1, 5);
+    }
+    if (t.emotionRanking.length) drawRanking('emotion-ranking', t.emotionRanking);
+    if (t.themeRanking.length)   drawRanking('theme-ranking',   t.themeRanking);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   RENDER: SETTINGS
+═══════════════════════════════════════════════ */
+function renderSettings() {
+  setEl('settings-name',     Auth.getName() + '・已連結');
+  setEl('settings-lastsync', sessionStorage.getItem('mb_lastsync') || '未知');
+}
+
+/* ═══════════════════════════════════════════════
+   CHARTS（Canvas）
+═══════════════════════════════════════════════ */
+function drawLineChart(canvasId, data, color, labels, minY, maxY) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || data.length < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W   = canvas.parentElement.offsetWidth || 300;
+  const H   = parseInt(getComputedStyle(canvas).height) || 120;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad  = { top:12, bottom: labels ? 24 : 12, left:8, right:8 };
+  const cW   = W - pad.left - pad.right;
+  const cH   = H - pad.top  - pad.bottom;
+  const step = cW / (data.length - 1);
+  const toX  = i => pad.left + i * step;
+  const toY  = v => pad.top  + (1 - (v - minY) / (maxY - minY)) * cH;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,.05)';
+  ctx.lineWidth = 1;
+  [1,2,3,4,5].forEach(v => {
+    const y = toY(v);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+  });
+
+  // Fill
+  const grad = ctx.createLinearGradient(0, pad.top, 0, H - pad.bottom);
+  grad.addColorStop(0, color + '40');
+  grad.addColorStop(1, color + '00');
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(data[0]));
+  data.forEach((v,i) => { if(i) ctx.lineTo(toX(i), toY(v)); });
+  ctx.lineTo(toX(data.length-1), H - pad.bottom);
+  ctx.lineTo(toX(0), H - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(data[0]));
+  data.forEach((v,i) => { if(i) ctx.lineTo(toX(i), toY(v)); });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Dots
+  data.forEach((v,i) => {
+    ctx.beginPath();
+    ctx.arc(toX(i), toY(v), 3.5, 0, Math.PI*2);
+    ctx.fillStyle   = color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.15)';
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
+  });
+
+  // Labels
+  if (labels) {
+    ctx.fillStyle  = 'rgba(168,152,128,.6)';
+    ctx.font       = '10px Noto Sans TC';
+    ctx.textAlign  = 'center';
+    labels.forEach((l,i) => ctx.fillText(l, toX(i), H - 4));
+  }
+}
+
+function drawEmotionBars(containerId, data) {
+  const el = document.getElementById(containerId);
+  if (!el || !data.length) return;
+  const max = Math.max(...data.map(d => d.count));
+  el.innerHTML = data.map(d => `
+    <div class="emotion-row">
+      <div class="emotion-label">${d.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(d.count/max*100)}%"></div></div>
+      <div class="bar-count">${d.count}</div>
+    </div>`).join('');
+}
+
+function drawRanking(containerId, data) {
+  const el = document.getElementById(containerId);
+  if (!el || !data.length) return;
+  const max = data[0].count;
+  el.innerHTML = data.map((d,i) => `
+    <div class="rank-item">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-name">${d.name}</div>
+      <div class="rank-bar-wrap"><div class="bar-track"><div class="bar-fill" style="width:${Math.round(d.count/max*100)}%"></div></div></div>
+      <div class="rank-count">${d.count}</div>
+    </div>`).join('');
+}
+
+/* ═══════════════════════════════════════════════
+   EXPORT / IMPORT
+═══════════════════════════════════════════════ */
+async function exportData() {
+  const [weekly, conversations] = await Promise.all([
+    IDB.getAll('weekly'), IDB.getAll('conversations'),
+  ]);
+  const payload = {
+    version: 2,
+    exported_at: new Date().toISOString(),
+    user_id: Auth.getUserId(),
+    weekly,
+    conversations,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `心事日記-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('已匯出資料');
+}
+
+async function importData(file) {
+  if (!file) return;
+  try {
+    const payload = JSON.parse(await file.text());
+    if (![1,2].includes(payload.version)) { showToast('不支援的檔案版本'); return; }
+    let w = 0, c = 0;
+    for (const x of (payload.weekly        || [])) { await IDB.put('weekly',        x); w++; }
+    for (const x of (payload.conversations || [])) { await IDB.put('conversations', x); c++; }
+    await refreshCurrentPage();
+    showToast(`匯入完成：${w} 份週報・${c} 則對話`);
+  } catch { showToast('檔案格式錯誤'); }
+  document.getElementById('import-file').value = '';
+}
+
+async function deleteAllData() {
+  if (!confirm('確定刪除所有本地資料？此操作無法復原。')) return;
+  await Promise.all([IDB.clearStore('weekly'), IDB.clearStore('conversations')]);
+  showToast('本地資料已清除');
+  await refreshCurrentPage();
+}
+
+/* ═══════════════════════════════════════════════
+   AUTH FLOW
+═══════════════════════════════════════════════ */
+async function handleOAuthCallback() {
+  const p    = new URLSearchParams(location.search);
+  const code = p.get('code'), state = p.get('state');
+  if (!code) return false;
+  if (state !== sessionStorage.getItem('oauth_state')) { showToast('登入狀態錯誤'); return false; }
+  try {
+    const { token, user_id, display_name } = await apiFetch('/api/auth/line_callback', {
+      method: 'POST',
+      body: JSON.stringify({ code, redirect_uri: CFG.REDIRECT_URI }),
+    });
+    Auth.set(token, user_id, display_name);
+    history.replaceState({}, '', '/');
+    return true;
+  } catch { showToast('登入失敗，請重試'); return false; }
+}
+
+function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display  = 'block';
+  // 更新 sidebar 用戶名
+  const nameEl = document.querySelector('.user-name');
+  if (nameEl) nameEl.textContent = Auth.getName();
+}
+
+function logout() {
+  Auth.clear();
+  document.getElementById('app-screen').style.display  = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+/* ═══════════════════════════════════════════════
+   UI HELPERS
+═══════════════════════════════════════════════ */
+function setEl(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setSyncBar(msg, spinning) {
+  const bar = document.querySelector('.sync-bar');
+  if (!bar) return;
+  const dot = bar.querySelector('.sync-dot');
+  bar.querySelector('span:last-child')
+    ? (bar.lastChild.textContent = msg)
+    : null;
+  bar.innerHTML = `<div class="sync-dot" style="${spinning ? '' : 'animation:none;opacity:.5'}"></div>${msg}`;
+  sessionStorage.setItem('mb_lastsync', new Date().toLocaleString('zh-Hant'));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+
+function initOffline() {
+  const b = document.getElementById('offline-banner');
+  const u = () => b.classList.toggle('show', !navigator.onLine);
+  window.addEventListener('online',  u);
+  window.addEventListener('offline', u);
+  u();
+}
+
+/* ═══════════════════════════════════════════════
+   HTML：動態 id 補丁（讓靜態 HTML 與 JS 對接）
+   把 prototype 裡的靜態文字換成帶 id 的 span
+═══════════════════════════════════════════════ */
+function patchHTML() {
+  // snapshot stats
+  patchText('snap-arousal-wrap',  'stat-val', 'snap-arousal',  '—');
+  patchText('snap-turns-wrap',    'stat-val', 'snap-turns',    '—');
+  patchText('snap-days-wrap',     'stat-val', 'snap-days',     '—');
+  // trends stats
+  patchText('trend-avg-wrap',   'trend-num', 'trend-avg',   '—');
+  patchText('trend-weeks-wrap', 'trend-num', 'trend-weeks', '—');
+  patchText('trend-turns-wrap', 'trend-num', 'trend-turns', '—');
+  patchText('trend-dir-wrap',   'trend-num', 'trend-dir',   '—');
+}
+
+function patchText(wrapId, cls, newId, dflt) {
+  // no-op：HTML 已直接用 id，不需要動態補丁
+}
+
+/* ═══════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════ */
+(async () => {
+  await IDB.open();
+  initOffline();
+
+  document.getElementById('line-login-btn').href = Auth.buildLineURL();
+
+  // OAuth callback
+  const wasCallback = await handleOAuthCallback();
+
+  if (Auth.getToken() || wasCallback) {
+    showApp();
+    await renderSnapshot();       // 先顯示本地資料
+    await Sync.run(true);         // 再線上增量同步
+  }
+})();
+
+// Resize 重繪
+window.addEventListener('resize', () => {
+  if (currentPage === 'snapshot') renderSnapshot();
+  if (currentPage === 'trends')   renderTrends();
+  if (currentPage === 'detail' && currentWeekId) renderDetail(currentWeekId);
+});
+</script>
+</body>
+</html>
