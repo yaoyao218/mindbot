@@ -53,6 +53,10 @@ class FastPathResult:
     state_label: str = "NORMAL"      # NORMAL / CRISIS / HIGH_VOLATILITY / STAGNANT
     elapsed_us: float = 0.0
 
+    @property
+    def is_crisis(self) -> bool:
+        return self.has_crisis
+
 
 def fast_path_eval(
     user_text: str,
@@ -165,3 +169,8 @@ def get_fastpath_tone_instruction(result: FastPathResult) -> str:
         )
 
     return ""
+
+
+def evaluate(text: str) -> FastPathResult:
+    """message.py 用的簡化入口，帶空 history/session"""
+    return fast_path_eval(text, [], {})

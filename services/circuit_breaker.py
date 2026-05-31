@@ -127,7 +127,14 @@ class EnhancedCircuitBreaker:
             return True
         return False  # HALF_OPEN 允許嘗試
 
-    def get_fallback(self, session: dict) -> str:
+    def can_attempt(self) -> bool:
+        return not self.should_use_fallback()
+
+    def get_fallback(self, session_or_arousal) -> str:
+        if isinstance(session_or_arousal, int):
+            pool = FALLBACK_POOL.get(session_or_arousal, FALLBACK_POOL[0])
+            return random.choice(pool)
+        session = session_or_arousal
         state_label = session.get("fast_path_state", "NORMAL")
         if state_label == "HIGH_VOLATILITY":
             return random.choice(HIGH_VOLATILITY_FALLBACK)

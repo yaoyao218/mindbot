@@ -104,7 +104,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     if is_crisis:
         crisis_msg = get_crisis_response()
         await _reply(reply_token, crisis_msg, line_bot_api)
-        await save_message(user_id, "bot", crisis_msg)
+        await append_message(user_id, "bot", crisis_msg)
         # 清除對話 session，危機後重置
         session["in_dialog"] = False
         await save_session(user_id, session)
@@ -169,7 +169,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         repair_msg = process_response(repair_msg, fp_result)
         session["history"].append({"role": "bot", "text": repair_msg})
         await save_session(user_id, session)
-        await save_message(user_id, "bot", repair_msg)
+        await append_message(user_id, "bot", repair_msg)
         await _reply(reply_token, repair_msg, line_bot_api)
         return
 
@@ -177,7 +177,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     if diagnosis.arousal_level == 5:
         crisis_msg = get_crisis_response()
         await _reply(reply_token, crisis_msg, line_bot_api)
-        await save_message(user_id, "bot", crisis_msg)
+        await append_message(user_id, "bot", crisis_msg)
         await log_referral(user_id, "crisis")
         return
 
