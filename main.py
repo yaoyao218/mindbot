@@ -17,6 +17,15 @@ from handlers.postback import handle_postback
 
 app = FastAPI()
 
+
+@app.on_event("startup")
+async def startup():
+    try:
+        from services.db_persistent import init_db
+        await init_db()
+    except Exception as e:
+        print(f"[Startup] DB init skipped (will use memory session): {e}")
+
 # 設定
 CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
