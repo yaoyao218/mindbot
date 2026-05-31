@@ -6,7 +6,7 @@ P0 Pydantic 攔截器
 
 import re
 from typing import Optional
-from services.fast_path import truncate_response, FastPathResult
+from services.fast_path import truncate_bot_reply, FastPathResult
 
 # 說教語句黑名單（前綴匹配）
 PREACHY_PATTERNS = [
@@ -72,7 +72,7 @@ def process_response(
     result = truncate_to_first_question(result)
 
     # Step 3: 字數截斷
-    if fast_path_result and fast_path_result.max_bot_chars:
-        result = truncate_response(result, fast_path_result.max_bot_chars)
+    if fast_path_result and fast_path_result.max_bot_length:
+        result = truncate_bot_reply(result, fast_path_result.max_bot_length)
 
     return result.strip()

@@ -23,11 +23,15 @@ async def get_session(user_id: str) -> dict:
             "user_id": user_id,
             "in_dialog": False,
             "method": None,
+            "phase": 0,
             "step": 0,
+            "total_turn": 0,
             "core_belief": None,
             "labels": {},
+            "psych": {},
             "history": [],
             "pending_checkin": None,
+            "fast_path_state": "NORMAL",
             "_created_at": now,
             "_updated_at": now
         }
