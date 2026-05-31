@@ -10,6 +10,11 @@ from datetime import datetime, date, timedelta
 from typing import Optional
 import httpx
 
+try:
+    import aiomysql
+except ImportError:
+    aiomysql = None
+
 from services.db_persistent import get_pool
 from services.redis_client import put_weekly_report
 
@@ -171,7 +176,6 @@ async def generate_weekly_summary(
 async def build_weekly_report(
     user_id: str, start: date, end: date, week_id: str
 ) -> Optional[dict]:
-    import aiomysql  # 延遲 import 避免循環
     messages   = await get_messages_in_range(user_id, start, end)
     psych_rows = await get_psych_in_range(user_id, start, end)
 
