@@ -20,22 +20,30 @@ from typing import Optional
 import aiomysql
 
 _pool: Optional[aiomysql.Pool] = None
+_pool_failed: bool = False   # DB 連線失敗後設為 True，後續直接走記憶體
 
 
 async def get_pool() -> aiomysql.Pool:
-    global _pool
+    global _pool, _pool_failed
+    if _pool_failed:
+        raise RuntimeError("DB unavailable, using memory mode")
     if _pool is None:
-        _pool = await aiomysql.create_pool(
-            host=os.environ.get("DB_HOST", "localhost"),
-            port=int(os.environ.get("DB_PORT", 3306)),
-            user=os.environ.get("DB_USER", "mindbot"),
-            password=os.environ.get("DB_PASSWORD", ""),
-            db=os.environ.get("DB_NAME", "mindbot"),
-            charset="utf8mb4",
-            autocommit=True,
-            minsize=2,
-            maxsize=10,
-        )
+        try:
+            _pool = await aiomysql.create_pool(
+                host=os.environ.get("DB_HOST", "localhost"),
+                port=int(os.environ.get("DB_PORT", 3306)),
+                user=os.environ.get("DB_USER", "mindbot"),
+                password=os.environ.get("DB_PASSWORD", ""),
+                db=os.environ.get("DB_NAME", "mindbot"),
+                charset="utf8mb4",
+                autocommit=True,
+                minsize=2,
+                maxsize=10,
+            )
+        except Exception as e:
+            _pool_failed = True
+            print(f"[DB] Connection failed, switching to memory mode: {e}")
+            raise RuntimeError(f"DB unavailable: {e}")
     return _pool
 
 

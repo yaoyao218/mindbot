@@ -27,21 +27,78 @@ from services.metacognition import get_reply as mct_reply
 from services.socratic import get_reply as socratic_reply
 from services.ai_label import analyze_message
 
-# DB（優先用持久化版，失敗則 fallback 到記憶體版）
+# DB（優先用持久化版，ImportError 或 DB 連線失敗都 fallback 到記憶體版）
+from services.session import (
+    get_session as _mem_get_session,
+    save_session as _mem_save_session,
+    clear_session as _mem_clear_session,
+)
+
+async def _noop(*a, **kw): pass
+async def _zero(*a, **kw): return 0
+
 try:
-    from services.db_persistent import (
-        get_session, save_session, append_message,
-        save_psych_state, count_today_referrals, log_referral,
-        save_checkin
-    )
-    DB_MODE = "persistent"
+    import services.db_persistent as _dbp
+
+    async def get_session(user_id):
+        try:
+            return await _dbp.get_session(user_id)
+        except Exception:
+            return await _mem_get_session(user_id)
+
+    async def save_session(user_id, session):
+        try:
+            await _dbp.save_session(user_id, session)
+        except Exception:
+            await _mem_save_session(user_id, session)
+
+    async def clear_session(user_id):
+        try:
+            await _dbp.clear_session(user_id)
+        except Exception:
+            await _mem_clear_session(user_id)
+
+    async def append_message(user_id, role, text):
+        try:
+            await _dbp.append_message(user_id, role, text)
+        except Exception:
+            pass
+
+    async def save_psych_state(user_id, psych, turn):
+        try:
+            await _dbp.save_psych_state(user_id, psych, turn)
+        except Exception:
+            pass
+
+    async def count_today_referrals(user_id, rtype="routine"):
+        try:
+            return await _dbp.count_today_referrals(user_id, rtype)
+        except Exception:
+            return 0
+
+    async def log_referral(user_id, rtype):
+        try:
+            await _dbp.log_referral(user_id, rtype)
+        except Exception:
+            pass
+
+    async def save_checkin(user_id, data):
+        try:
+            await _dbp.save_checkin(user_id, data)
+        except Exception:
+            pass
+
+    DB_MODE = "persistent_with_fallback"
+
 except ImportError:
-    from services.session import get_session, save_session
-    async def append_message(*a, **kw): pass
-    async def save_psych_state(*a, **kw): pass
-    async def count_today_referrals(*a, **kw): return 0
-    async def log_referral(*a, **kw): pass
-    async def save_checkin(*a, **kw): pass
+    get_session = _mem_get_session
+    save_session = _mem_save_session
+    clear_session = _mem_clear_session
+    append_message = _noop
+    save_psych_state = _noop
+    count_today_referrals = _zero
+    log_referral = _noop
+    save_checkin = _noop
     DB_MODE = "memory"
 
 CHECKIN_KEYWORDS = ["簽到", "check in", "checkin", "今天狀態"]
@@ -79,11 +136,7 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     # ── 停止對話 ────────────────────────────────────────────
     session_check = await get_session(user_id)
     if any(kw in text for kw in STOP_KEYWORDS) and session_check.get("in_dialog"):
-        from services.db_persistent import clear_session as clear_db_session
-        try:
-            await clear_db_session(user_id)
-        except Exception:
-            pass
+        await clear_session(user_id)
         msg = "好的，我們先在這裡停下來。\n\n隨時想繼續，或有什麼想說的，都可以傳訊息給我。"
         await _reply(reply_token, msg, line_bot_api)
         return
