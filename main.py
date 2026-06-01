@@ -5,7 +5,8 @@ import base64
 import httpx
 from typing import Optional
 from fastapi import FastAPI, Request, HTTPException, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from linebot.v3 import WebhookParser
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi,
@@ -18,6 +19,11 @@ from handlers.message import handle_message
 from handlers.postback import handle_postback
 
 app = FastAPI()
+
+# 掛載靜態檔案目錄
+import os as _os
+if _os.path.isdir("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.on_event("startup")
@@ -81,6 +87,31 @@ async def process_line_events(events: list) -> None:
 @app.get("/")
 async def health_check():
     return {"status": "MindBot is running 🤖"}
+
+
+# ── 前端 SPA ─────────────────────────────────────────────
+
+@app.get("/app")
+async def serve_app():
+    """心事日記 Web App 主頁"""
+    return FileResponse("static/prototype.html")
+
+
+@app.get("/callback")
+async def oauth_callback():
+    """LINE Login OAuth redirect → 回到 SPA 由前端處理 code"""
+    return FileResponse("static/prototype.html")
+
+
+# ── 前端設定（注入環境變數給 SPA）────────────────────────
+
+@app.get("/api/config")
+async def get_config():
+    """前端啟動時呼叫，取得 LINE Login Channel ID 等設定"""
+    return JSONResponse({
+        "line_login_channel_id": os.environ.get("LINE_LOGIN_CHANNEL_ID", ""),
+        "app_url": os.environ.get("APP_URL", "https://web-production-dd506.up.railway.app"),
+    })
 
 
 # ── Webhook（立刻回 200，非同步處理）─────────────────────

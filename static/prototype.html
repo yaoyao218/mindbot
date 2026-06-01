@@ -972,10 +972,23 @@ canvas { display: block; width: 100% !important; }
    CONFIG
 ═══════════════════════════════════════════════ */
 const CFG = {
-  LINE_CLIENT_ID: '__LINE_LOGIN_CHANNEL_ID__',   // 部署時替換
+  LINE_CLIENT_ID: '',             // 從 /api/config 動態載入
   REDIRECT_URI:   location.origin + '/callback',
-  API:            '',   // same-origin
+  API:            '',             // same-origin
 };
+
+// 啟動時從後端取得設定
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config');
+    const data = await r.json();
+    if (data.line_login_channel_id) {
+      CFG.LINE_CLIENT_ID = data.line_login_channel_id;
+    }
+  } catch(e) {
+    console.warn('[Config] Failed to load config:', e);
+  }
+}
 
 const EMOTION_LABEL = {
   ACUTE_DISTRESS:'急性痛苦', RUMINATION:'反芻思考',
@@ -1670,6 +1683,7 @@ function patchText(wrapId, cls, newId, dflt) {
    INIT
 ═══════════════════════════════════════════════ */
 (async () => {
+  await loadConfig();           // 先從後端取得 LINE_CLIENT_ID
   await IDB.open();
   initOffline();
 

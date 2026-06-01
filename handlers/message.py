@@ -101,10 +101,14 @@ except ImportError:
     save_checkin = _noop
     DB_MODE = "memory"
 
-CHECKIN_KEYWORDS = ["簽到", "check in", "checkin", "今天狀態"]
-START_KEYWORDS = ["開始", "start", "你好", "hi", "hello", "嗨", "哈囉"]
-HELP_KEYWORDS = ["說明", "help", "怎麼用", "功能"]
-STOP_KEYWORDS = ["停止", "結束對話", "不想說了", "先這樣"]
+CHECKIN_KEYWORDS  = ["簽到", "check in", "checkin", "今天狀態"]
+START_KEYWORDS    = ["開始", "start", "你好", "hi", "hello", "嗨", "哈囉"]
+HELP_KEYWORDS     = ["說明", "help", "怎麼用", "功能"]
+STOP_KEYWORDS     = ["停止", "結束對話", "不想說了", "先這樣"]
+WEBSITE_KEYWORDS  = ["看紀錄", "我的記錄", "心情記錄", "情緒記錄", "查看日記",
+                     "歷史紀錄", "心情日記", "報告", "週報", "統計"]
+
+APP_URL = "https://web-production-dd506.up.railway.app/app"
 
 METHOD_MAP = {
     "BYRON_KATIE": bk_reply,
@@ -132,6 +136,9 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     if any(kw in text.lower() for kw in HELP_KEYWORDS):
         await send_help(reply_token, line_bot_api)
         return
+    if any(kw in text for kw in WEBSITE_KEYWORDS):
+        await send_website_link(reply_token, line_bot_api)
+        return
 
     # ── 停止對話 ────────────────────────────────────────────
     session_check = await get_session(user_id)
@@ -139,6 +146,8 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         await clear_session(user_id)
         msg = "好的，我們先在這裡停下來。\n\n隨時想繼續，或有什麼想說的，都可以傳訊息給我。"
         await _reply(reply_token, msg, line_bot_api)
+        # 結束後主動傳送網站連結
+        await send_website_link_push(user_id, line_bot_api)
         return
 
     # ── 取得 Session ────────────────────────────────────────
@@ -347,6 +356,7 @@ async def handle_checkin_supplement(event, line_bot_api, session, text):
         session.pop("pending_checkin")
         await save_session(user_id, session)
         await _reply(reply_token, "已記錄 ✓\n\n如果之後想聊聊，隨時傳訊息給我。", line_bot_api)
+        await send_website_link_push(user_id, line_bot_api)
     else:
         result = await analyze_checkin(text, pending["emotion"])
         await save_checkin(user_id, {
@@ -360,6 +370,85 @@ async def handle_checkin_supplement(event, line_bot_api, session, text):
         await save_session(user_id, session)
         reflection = result.get("reflection", "謝謝你願意說出來。")
         await _reply(reply_token, f"已記錄 ✓\n\n{reflection}", line_bot_api)
+        await send_website_link_push(user_id, line_bot_api)
+
+
+# ── 網站引導 Flex Message ────────────────────────────────────
+
+def _website_flex() -> FlexMessage:
+    """「查看心情日記」Flex Message 按鈕卡片"""
+    content = {
+        "type": "bubble",
+        "size": "kilo",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "paddingAll": "16px",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "心事日記 🌿",
+                    "weight": "bold",
+                    "color": "#1D9E75",
+                    "size": "sm"
+                },
+                {
+                    "type": "text",
+                    "text": "你的情緒紀錄都在這裡",
+                    "size": "xs",
+                    "color": "#888888",
+                    "margin": "sm"
+                }
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "uri",
+                        "label": "查看我的心情日記",
+                        "uri": APP_URL
+                    },
+                    "style": "primary",
+                    "color": "#1D9E75",
+                    "height": "sm"
+                }
+            ],
+            "paddingAll": "12px"
+        }
+    }
+    return FlexMessage(
+        alt_text="查看心情日記",
+        contents=FlexContainer.from_dict(content)
+    )
+
+
+async def send_website_link(reply_token: str, line_bot_api: MessagingApi):
+    """用 reply 傳送網站連結（用於關鍵字直接觸發）"""
+    await line_bot_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[_website_flex()]
+        )
+    )
+
+
+async def send_website_link_push(user_id: str, line_bot_api: MessagingApi):
+    """用 push 傳送網站連結（用於事件完成後的主動通知）"""
+    try:
+        from linebot.v3.messaging import PushMessageRequest
+        await line_bot_api.push_message(
+            PushMessageRequest(
+                to=user_id,
+                messages=[_website_flex()]
+            )
+        )
+    except Exception as e:
+        print(f"[Website Push] Error: {e}")
 
 
 # ── 工具函式 ──────────────────────────────────────────────────
