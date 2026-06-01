@@ -3,23 +3,10 @@ P1 臨床診斷器
 評估 Arousal Level、防衛機制、治療同盟破裂
 """
 
-import os
 import json
-import httpx
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Literal
-
-API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-haiku-4-5-20251001"  # 診斷用 Haiku 即可，節省成本
-
-
-def _get_headers() -> dict:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    return {
-        "Content-Type": "application/json",
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-    }
+from services.llm import call_api
 
 
 ArousaLevel = Literal[1, 2, 3, 4, 5]
@@ -107,33 +94,18 @@ async def diagnose(
 - WITHDRAWAL：沉默、很短的回覆、失去投入感"""
 
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
-                API_URL,
-                headers=_get_headers(),
-                json={
-                    "model": MODEL,
-                    "max_tokens": 300,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-            )
-            data = response.json()
-            text_result = data["content"][0]["text"].strip()
-            text_result = text_result.replace("```json", "").replace("```", "").strip()
-            parsed = json.loads(text_result)
-
-            arousal = int(parsed.get("arousal_level", 3))
-            # 依 Arousal 設定轉介機率
-            referral_prob = {1: 0.1, 2: 0.3, 3: 0.3, 4: 0.6, 5: 1.0}.get(arousal, 0.3)
-
-            return DiagnosisResult(
-                arousal_level=arousal,
-                defense_mechanism=parsed.get("defense_mechanism", "NONE"),
-                alliance_rupture=parsed.get("alliance_rupture", "NONE"),
-                referral_probability=referral_prob,
-                notes=parsed.get("notes", "")
-            )
-
+        raw = await call_api(prompt, max_tokens=300, tier="haiku")
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        parsed = json.loads(raw)
+        arousal = int(parsed.get("arousal_level", 3))
+        referral_prob = {1: 0.1, 2: 0.3, 3: 0.3, 4: 0.6, 5: 1.0}.get(arousal, 0.3)
+        return DiagnosisResult(
+            arousal_level=arousal,
+            defense_mechanism=parsed.get("defense_mechanism", "NONE"),
+            alliance_rupture=parsed.get("alliance_rupture", "NONE"),
+            referral_probability=referral_prob,
+            notes=parsed.get("notes", "")
+        )
     except Exception as e:
         print(f"[Clinical Diagnosis Error] {e}")
         return DiagnosisResult()  # 預設安全值

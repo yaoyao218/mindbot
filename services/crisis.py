@@ -2,12 +2,8 @@
 危機偵測模組（雙層：關鍵字 + AI 確認）
 """
 
-import os
 import json
-import httpx
-
-API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-haiku-4-5-20251001"
+from services.llm import call_api
 
 CRISIS_KEYWORDS = [
     "不想活", "想死", "自殺", "去死", "活不下去",
@@ -36,26 +32,9 @@ async def ai_crisis_check(text: str) -> bool:
 訊息：「{text}」"""
 
     try:
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-            "anthropic-version": "2023-06-01",
-        }
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                API_URL,
-                headers=headers,
-                json={
-                    "model": MODEL,
-                    "max_tokens": 50,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-            )
-            data = response.json()
-            text_result = data["content"][0]["text"].strip()
-            text_result = text_result.replace("```json", "").replace("```", "").strip()
-            parsed = json.loads(text_result)
-            return parsed.get("is_crisis", False)
+        raw = await call_api(prompt, max_tokens=50, tier="haiku")
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        return json.loads(raw).get("is_crisis", False)
     except Exception as e:
         print(f"[Crisis AI Error] {e}")
         return True  # 失敗時保守判斷為危機

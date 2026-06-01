@@ -5,10 +5,9 @@
 - 結果存 DB archives + Redis 等待用戶領取
 - 原始 session_messages 刪除
 """
-import os, json, asyncio
+import json, asyncio
 from datetime import datetime, date
 from calendar import monthrange
-import httpx
 
 from services.db_persistent import (
     get_users_with_old_data,
@@ -18,9 +17,7 @@ from services.db_persistent import (
     get_pool,
 )
 from services.redis_client import put_archive
-
-ANTHROPIC_API = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-20250514"
+from services.llm import call_api
 
 # ── AI 摘要生成 ───────────────────────────────────────────
 async def generate_summary(messages: list[dict], year_month: str) -> tuple[str, dict]:
@@ -48,24 +45,9 @@ async def generate_summary(messages: list[dict], year_month: str) -> tuple[str, 
   }}
 }}"""
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            ANTHROPIC_API,
-            headers={
-                "x-api-key": os.environ["ANTHROPIC_API_KEY"],
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "max_tokens": 800,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-        )
-        resp.raise_for_status()
-        raw = resp.json()["content"][0]["text"]
-
-    # 清理 markdown fences
+    raw = await call_api(prompt, max_tokens=800)
+    if not raw:
+        raise ValueError("empty response from LLM")
     clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
     data = json.loads(clean)
 

@@ -1,3 +1,4 @@
+from services.llm import call_api
 """
 後設認知療法（MCT）對話模組
 Phase 0: 正向後設認知信念評估
@@ -5,34 +6,6 @@ Phase 1: 反芻行為實驗（有正向信念才執行）
 Phase 2: MCT 主體四步（計畫→執行→監控→評估）
 """
 
-import os
-import json
-import httpx
-
-API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
-
-
-def _get_headers() -> dict:
-    return {
-        "Content-Type": "application/json",
-        "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-        "anthropic-version": "2023-06-01",
-    }
-
-
-async def _call_api(prompt: str, max_tokens: int = 300) -> str:
-    try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            response = await client.post(
-                API_URL, headers=_get_headers(),
-                json={"model": MODEL, "max_tokens": max_tokens,
-                      "messages": [{"role": "user", "content": prompt}]}
-            )
-            return response.json()["content"][0]["text"].strip()
-    except Exception as e:
-        print(f"[MCT API Error] {e}")
-        return ""
 
 
 async def assess_positive_metacognition(user_text: str) -> bool:
@@ -48,15 +21,9 @@ async def assess_positive_metacognition(user_text: str) -> bool:
 跡象包括：說自己需要「想清楚」、「多想想」、「不能不想」、「想通了才能放下」"""
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                API_URL, headers=_get_headers(),
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 80,
-                      "messages": [{"role": "user", "content": prompt}]}
-            )
-            text = response.json()["content"][0]["text"].strip()
-            text = text.replace("```json", "").replace("```", "").strip()
-            return json.loads(text).get("has_positive_metacognition", False)
+        raw = await call_api(prompt, max_tokens=80, tier="haiku")
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        return json.loads(raw).get("has_positive_metacognition", False)
     except Exception:
         return False
 
@@ -91,7 +58,7 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
 - 先簡短傾聽
 - 問：「你最想從這段對話裡得到什麼？是想理清楚事情的脈絡，還是讓腦袋停一下？」
 只回傳對話文字。"""
-            reply = await _call_api(prompt)
+            reply = await call_api(prompt)
             return reply or "我在聽。你最想從這段對話裡得到什麼？", updates
         return reply, updates
 
@@ -107,7 +74,7 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
   「我想邀請你試一個小實驗：這一天讓自己盡量想這件事，明天試試刻意減少想它，
    然後比較看看——哪天你感覺比較能往前走？」
 只回傳對話文字。"""
-            reply = await _call_api(prompt)
+            reply = await call_api(prompt)
             return reply or "好的，我聽到了。我想邀請你試個小實驗：今天讓自己盡量想這件事，明天刻意少想，然後比較看看哪天你狀態比較好？", updates
 
         elif step == 1:
@@ -119,7 +86,7 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
 - 承接用戶的回應
 - 說：「好，那我們來看看這件事本身。你最想先弄清楚哪個部分？」
 只回傳對話文字。"""
-            reply = await _call_api(prompt)
+            reply = await call_api(prompt)
             return reply or "好，那我們來看看這件事本身。你最想先弄清楚哪個部分？", updates
 
     # ── Phase 2：MCT 主體四步 ──────────────────────────────
@@ -134,7 +101,7 @@ MCT Step 2「執行」：幫助用戶區分「事實」與「解讀/想法」。
 - 說：「我們來試著分一下：在這件事裡，哪些是確實發生的事實？
   哪些是你對這件事的解讀或想法？」
 只回傳對話文字。"""
-            reply = await _call_api(prompt)
+            reply = await call_api(prompt)
             return reply or "我們來試著分一下：這件事裡，哪些是確實發生的事實？哪些是你對它的解讀？", updates
 
         if step == 2:  # 執行
@@ -149,7 +116,7 @@ MCT Step 3「監控」：介紹分離式正念（Detached Mindfulness）。
    就像路邊走過的陌生人——你看到了，但你繼續走你的路。
    你能試試這個感覺嗎？」
 只回傳對話文字。"""
-            reply = await _call_api(prompt)
+            reply = await call_api(prompt)
             return reply or "好，你區分了事實和解讀。現在試試：讓這些念頭在那裡，不跟它說話也不推開它——就像路邊走過的陌生人。你試試看這個感覺？", updates
 
         if step == 3:  # 監控
@@ -163,7 +130,7 @@ MCT Step 4「評估」：重新評估反芻的代價與控制感。
   現在你覺得這樣的思考方式，幫你更靠近你想要的結果了嗎？
   還是讓你離得更遠？」
 只回傳對話文字。"""
-            reply = await _call_api(prompt)
+            reply = await call_api(prompt)
             return reply or "謝謝你試了這個。回頭看看你之前一直在想的事——這樣的方式，讓你更靠近你想要的嗎？還是更遠？", updates
 
         if step == 4:  # 評估
@@ -174,7 +141,7 @@ MCT Step 4「評估」：重新評估反芻的代價與控制感。
 - 反映用戶走過的歷程
 - 問：「如果下次那個反芻的念頭又來了，你現在有沒有多了一點空間去回應它？」
 只回傳對話文字。"""
-            reply = await _call_api(prompt)
+            reply = await call_api(prompt)
             return reply or "謝謝你今天走過這些。下次反芻的念頭又來時，你覺得自己多了一點空間去回應它嗎？", updates
 
     return "謝謝你今天的探索。如果那個念頭又開始轉，記得可以讓它在那裡，你繼續走你的路。", {}

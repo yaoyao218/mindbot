@@ -16,8 +16,6 @@ Circuit Breaker（三態狀態機）：
 
 import time
 import random
-import os
-import httpx
 
 # ── 靜態兜底語句池 ───────────────────────────────────────
 
@@ -157,40 +155,24 @@ async def safe_claude_call(
     prompt: str,
     session: dict,
     max_tokens: int = 400,
-    timeout: float = 20.0,
-    model: str = "claude-sonnet-4-6",
+    tier: str = "sonnet",
 ) -> tuple[str, bool]:
     """
-    帶 Circuit Breaker 保護的 Claude API 呼叫
+    帶 Circuit Breaker 保護的 LLM 呼叫
     Returns: (reply, used_fallback)
     """
+    from services.llm import call_api
     breaker = get_breaker()
 
     if breaker.should_use_fallback():
         return breaker.get_fallback(session), True
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            res = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "Content-Type": "application/json",
-                    "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-                    "anthropic-version": "2023-06-01",
-                },
-                json={
-                    "model": model,
-                    "max_tokens": max_tokens,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-            data = res.json()
-            if data.get("type") == "error":
-                raise ValueError(data["error"]["message"])
-            reply = data["content"][0]["text"].strip()
-            breaker.record_success()
-            return reply, False
-
+        reply = await call_api(prompt, max_tokens=max_tokens, tier=tier)
+        if not reply:
+            raise ValueError("empty response")
+        breaker.record_success()
+        return reply, False
     except Exception as e:
         print(f"[CB] API 失敗：{e}")
         breaker.record_failure()

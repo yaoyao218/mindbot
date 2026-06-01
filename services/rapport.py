@@ -4,20 +4,7 @@
 第二輪：繼續傾聽 + 輕詢今天想要什麼
 """
 
-import os
-import json
-import httpx
-
-API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
-
-
-def _get_headers() -> dict:
-    return {
-        "Content-Type": "application/json",
-        "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-        "anthropic-version": "2023-06-01",
-    }
+from services.llm import call_api
 
 
 async def rapport_turn_1(user_text: str) -> str:
@@ -36,22 +23,8 @@ async def rapport_turn_1(user_text: str) -> str:
 
 只回傳回應文字，不要任何其他內容。"""
 
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
-                API_URL,
-                headers=_get_headers(),
-                json={
-                    "model": MODEL,
-                    "max_tokens": 150,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-            )
-            data = response.json()
-            return data["content"][0]["text"].strip()
-    except Exception as e:
-        print(f"[Rapport Turn 1 Error] {e}")
-        return "謝謝你願意說出這些。聽起來你心裡有很多東西。"
+    reply = await call_api(prompt, max_tokens=150)
+    return reply or "謝謝你願意說出這些。聽起來你心裡有很多東西。"
 
 
 async def rapport_turn_2(user_text: str, turn_1_text: str) -> str:
@@ -73,19 +46,5 @@ async def rapport_turn_2(user_text: str, turn_1_text: str) -> str:
 
 只回傳回應文字，不要任何其他內容。"""
 
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
-                API_URL,
-                headers=_get_headers(),
-                json={
-                    "model": MODEL,
-                    "max_tokens": 200,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-            )
-            data = response.json()
-            return data["content"][0]["text"].strip()
-    except Exception as e:
-        print(f"[Rapport Turn 2 Error] {e}")
-        return "我在這裡，繼續聽你說。今天來這裡，最想要的是什麼呢？"
+    reply = await call_api(prompt, max_tokens=200)
+    return reply or "我在這裡，繼續聽你說。今天來這裡，最想要的是什麼呢？"

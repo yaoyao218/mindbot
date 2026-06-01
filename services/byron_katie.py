@@ -1,3 +1,4 @@
+from services.llm import call_api
 """
 Byron Katie 四問法對話模組
 Phase 0: 認知融合評估
@@ -6,39 +7,6 @@ Phase 2: 四問本體 + 翻轉
 Phase 3: 結語
 """
 
-import os
-import json
-import httpx
-
-API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
-
-
-def _get_headers() -> dict:
-    return {
-        "Content-Type": "application/json",
-        "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-        "anthropic-version": "2023-06-01",
-    }
-
-
-async def _call_api(prompt: str, max_tokens: int = 300) -> str:
-    try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            response = await client.post(
-                API_URL,
-                headers=_get_headers(),
-                json={
-                    "model": MODEL,
-                    "max_tokens": max_tokens,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-            )
-            data = response.json()
-            return data["content"][0]["text"].strip()
-    except Exception as e:
-        print(f"[Byron Katie API Error] {e}")
-        return ""
 
 
 async def assess_fusion(user_text: str, core_belief: str) -> dict:
@@ -60,15 +28,9 @@ async def assess_fusion(user_text: str, core_belief: str) -> dict:
 {{"fusion_level": "HIGH|LOW", "belief_statement": "用一句話表達核心信念"}}"""
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                API_URL, headers=_get_headers(),
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 150,
-                      "messages": [{"role": "user", "content": prompt}]}
-            )
-            text = response.json()["content"][0]["text"].strip()
-            text = text.replace("```json", "").replace("```", "").strip()
-            return json.loads(text)
+        raw = await call_api(prompt, max_tokens=150, tier="haiku")
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
     except Exception:
         return {"fusion_level": "LOW", "belief_statement": core_belief or user_text[:50]}
 
@@ -203,7 +165,7 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
         else:
             return "謝謝你今天的探索。如果你想繼續，隨時可以說。", updates
 
-        reply = await _call_api(prompt)
+        reply = await call_api(prompt)
         if not reply:
             reply = "謝謝你的回應。我們繼續往下看。"
         return reply, updates

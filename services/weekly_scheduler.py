@@ -5,10 +5,9 @@
 - 組成 WeeklyReport → Redis 待領
 - 刪除 MariaDB 原始資料
 """
-import os, json, asyncio
+import json, asyncio
 from datetime import datetime, date, timedelta
 from typing import Optional
-import httpx
 
 try:
     import aiomysql
@@ -17,9 +16,7 @@ except ImportError:
 
 from services.db_persistent import get_pool
 from services.redis_client import put_weekly_report
-
-ANTHROPIC_API = "https://api.anthropic.com/v1/messages"
-MODEL         = "claude-sonnet-4-20250514"
+from services.llm import call_api
 
 # ── 週 ID 工具 ────────────────────────────────────────────
 def get_week_id(d: date) -> str:
@@ -146,23 +143,9 @@ async def generate_weekly_summary(
   "growth_note": "一句話，觀察用戶本週的細微轉變或值得肯定之處"
 }}"""
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            ANTHROPIC_API,
-            headers={
-                "x-api-key":         os.environ["ANTHROPIC_API_KEY"],
-                "anthropic-version": "2023-06-01",
-                "content-type":      "application/json",
-            },
-            json={
-                "model":      MODEL,
-                "max_tokens": 500,
-                "messages":   [{"role": "user", "content": prompt}],
-            },
-        )
-        resp.raise_for_status()
-
-    raw   = resp.json()["content"][0]["text"]
+    raw   = await call_api(prompt, max_tokens=500)
+    if not raw:
+        raise ValueError("empty response from LLM")
     clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
     data  = json.loads(clean)
 

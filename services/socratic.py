@@ -1,3 +1,4 @@
+from services.llm import call_api
 """
 蘇格拉底式對話模組（非線性）
 Phase 0: 洞察就緒評估（LOW/MEDIUM/HIGH）
@@ -6,43 +7,6 @@ Phase 1: 動態六策略選擇器（最多 6 輪）
 Padesky 四要素貫穿全程
 """
 
-import os
-import json
-import httpx
-
-API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
-
-STRATEGIES = [
-    "concretize",        # 拉到具體事件
-    "counter_example",   # 帶入例外
-    "perspective_shift", # 換位思考
-    "pattern_recognition",# 看見重複模式
-    "standard_check",    # 對自己 vs 對別人的標準
-    "open_discovery",    # 讓用戶自己說出結論
-]
-
-
-def _get_headers() -> dict:
-    return {
-        "Content-Type": "application/json",
-        "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-        "anthropic-version": "2023-06-01",
-    }
-
-
-async def _call_api(prompt: str, max_tokens: int = 300, model: str = MODEL) -> str:
-    try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            response = await client.post(
-                API_URL, headers=_get_headers(),
-                json={"model": model, "max_tokens": max_tokens,
-                      "messages": [{"role": "user", "content": prompt}]}
-            )
-            return response.json()["content"][0]["text"].strip()
-    except Exception as e:
-        print(f"[Socratic API Error] {e}")
-        return ""
 
 
 async def assess_insight_readiness(user_text: str) -> dict:
@@ -61,15 +25,9 @@ async def assess_insight_readiness(user_text: str) -> dict:
 回傳：{{"readiness": "LOW|MEDIUM|HIGH", "depth": "surface|moderate|deep"}}"""
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                API_URL, headers=_get_headers(),
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 100,
-                      "messages": [{"role": "user", "content": prompt}]}
-            )
-            text = response.json()["content"][0]["text"].strip()
-            text = text.replace("```json", "").replace("```", "").strip()
-            return json.loads(text)
+        raw = await call_api(prompt, max_tokens=100, tier="haiku")
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
     except Exception:
         return {"readiness": "MEDIUM", "depth": "moderate"}
 
@@ -109,7 +67,7 @@ async def choose_strategy(
 
 只回傳策略名稱（如：concretize）"""
 
-    result = await _call_api(prompt, max_tokens=30, model="claude-haiku-4-5-20251001")
+    result = await call_api(prompt, max_tokens=30, tier="haiku")
     result = result.strip().lower()
     return result if result in STRATEGIES else (available[0] if available else "open_discovery")
 
@@ -175,7 +133,7 @@ c. 從具體到抽象
 d. 不給答案，讓用戶自己得出結論
 
 給出 40-60 字的回應，只回傳對話文字。"""
-        reply = await _call_api(prompt)
+        reply = await call_api(prompt)
         return reply or "能說一個最近具體發生的例子嗎？", updates
 
     # ── Phase 1：動態策略對話（最多 6 輪）─────────────────
@@ -190,7 +148,7 @@ d. 不給答案，讓用戶自己得出結論
 - 反映用戶剛才說的洞察
 - 輕輕問：「這個發現，對你來說意味著什麼？」
 只回傳對話文字。"""
-            reply = await _call_api(prompt)
+            reply = await call_api(prompt)
             return reply or "你剛才說的讓我很有感。這個發現，對你來說意味著什麼？", updates
 
         # 選下一個策略
@@ -211,7 +169,7 @@ d. 不給答案，讓用戶自己得出結論
 
 Padesky 四要素：不給答案，讓用戶自己得出結論。
 給出 40-60 字的回應，只回傳對話文字。"""
-        reply = await _call_api(prompt)
+        reply = await call_api(prompt)
         return reply or "這讓我好奇：有沒有哪次不一樣的情況？", updates
 
     # ── Phase 2：結語 ──────────────────────────────────────

@@ -1,18 +1,5 @@
-import os
 import json
-import httpx
-
-API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
-
-
-def _get_headers() -> dict:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    return {
-        "Content-Type": "application/json",
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-    }
+from services.llm import call_api
 
 
 async def analyze_message(text: str) -> dict:
@@ -40,24 +27,9 @@ async def analyze_message(text: str) -> dict:
 - INSIGHT_EMERGING → SOCRATIC"""
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                API_URL,
-                headers=_get_headers(),
-                json={
-                    "model": MODEL,
-                    "max_tokens": 500,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-            )
-            data = response.json()
-            if "content" not in data:
-                print(f"[AI Label Error] API response: {data}")
-                raise ValueError(f"Unexpected API response: {data}")
-            text_result = data["content"][0]["text"].strip()
-            text_result = text_result.replace("```json", "").replace("```", "").strip()
-            return json.loads(text_result)
-
+        raw = await call_api(prompt, max_tokens=500)
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
     except Exception as e:
         print(f"[AI Label Error] {e}")
         return {
@@ -84,24 +56,9 @@ async def analyze_checkin(text: str, known_emotion: str) -> dict:
 }}"""
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                API_URL,
-                headers=_get_headers(),
-                json={
-                    "model": MODEL,
-                    "max_tokens": 300,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-            )
-            data = response.json()
-            if "content" not in data:
-                print(f"[Checkin AI Error] API response: {data}")
-                raise ValueError(f"Unexpected API response: {data}")
-            text_result = data["content"][0]["text"].strip()
-            text_result = text_result.replace("```json", "").replace("```", "").strip()
-            return json.loads(text_result)
-
+        raw = await call_api(prompt, max_tokens=300)
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
     except Exception as e:
         print(f"[Checkin AI Error] {e}")
         return {
