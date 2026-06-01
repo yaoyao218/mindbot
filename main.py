@@ -163,6 +163,32 @@ async def line_callback(request: Request):
     })
 
 
+# ── LLM 連線測試（臨時，部署確認後可移除）────────────────
+
+@app.get("/api/llm-test")
+async def llm_test():
+    """測試 Groq / Anthropic 是否正確連線"""
+    import os
+    from services.llm import call_api, _provider
+    provider = _provider()
+    key_set = bool(os.environ.get("GROQ_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"))
+    try:
+        reply = await call_api("請用繁體中文回答：1+1=？只回答數字即可。", max_tokens=10)
+        return JSONResponse({
+            "provider": provider,
+            "key_set": key_set,
+            "reply": reply,
+            "ok": bool(reply),
+        })
+    except Exception as e:
+        return JSONResponse({
+            "provider": provider,
+            "key_set": key_set,
+            "error": str(e),
+            "ok": False,
+        }, status_code=500)
+
+
 # ── 前端同步 API ──────────────────────────────────────────
 
 @app.get("/api/sync/conversations")
