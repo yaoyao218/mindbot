@@ -163,7 +163,33 @@ async def line_callback(request: Request):
     })
 
 
-# ── LLM 連線測試（臨時，部署確認後可移除）────────────────
+# ── 環境變數 + 連線診斷 ──────────────────────────────────
+
+@app.get("/api/health")
+async def health_detail():
+    """完整診斷：環境變數是否齊全"""
+    import os
+    def masked(key):
+        v = os.environ.get(key, "")
+        if not v: return "❌ 未設定"
+        return f"✅ {v[:6]}…（長度 {len(v)}）"
+
+    from services.llm import _provider
+    return JSONResponse({
+        "server": "ok",
+        "llm_provider": _provider(),
+        "env": {
+            "LINE_CHANNEL_SECRET":       masked("LINE_CHANNEL_SECRET"),
+            "LINE_CHANNEL_ACCESS_TOKEN": masked("LINE_CHANNEL_ACCESS_TOKEN"),
+            "LINE_LOGIN_CHANNEL_ID":     masked("LINE_LOGIN_CHANNEL_ID"),
+            "LINE_LOGIN_CHANNEL_SECRET": masked("LINE_LOGIN_CHANNEL_SECRET"),
+            "GROQ_API_KEY":              masked("GROQ_API_KEY"),
+            "ANTHROPIC_API_KEY":         masked("ANTHROPIC_API_KEY"),
+            "REDIS_URL":                 masked("REDIS_URL"),
+            "DB_HOST":                   masked("DB_HOST"),
+        }
+    })
+
 
 @app.get("/api/llm-test")
 async def llm_test():
