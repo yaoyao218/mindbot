@@ -22,50 +22,69 @@ class AppController {
 
   /* ── 啟動入口 ─────────────────────────────────── */
   async init() {
+    // ★ 看門狗：無論任何情況，5 秒後強制開門，絕對不讓使用者卡死
+    const watchdog = setTimeout(() => {
+      console.warn('[App] ★ Watchdog fired: 5s elapsed, forcing UI open');
+      this._forceOpen();
+    }, 5000);
+
     try {
       this._token    = localStorage.getItem('mb_token');
       this._userId   = localStorage.getItem('mb_user_id');
       this._userName = localStorage.getItem('mb_name') || '用戶';
 
-      // 載入 LIFF_ID 後初始化 LIFF
+      // 載入 LIFF_ID — 使用帶 timeout 的 _api()，避免 Railway 冷啟動卡死
       try {
-        const cfg = await fetch('/api/config').then(r => r.json());
+        const cfg = await this._api('/api/config');   // ← 8s timeout 保護
         if (cfg.liff_id && window.liff) {
-          await this._initLiff(cfg.liff_id);
+          // liff.init() 本身沒有 timeout，用 Promise.race 加上 6s 熔斷
+          await Promise.race([
+            this._initLiff(cfg.liff_id),
+            new Promise((_, rej) =>
+              setTimeout(() => rej(new Error('liff.init timeout')), 6000)
+            ),
+          ]);
         }
       } catch (err) {
-        console.warn('[App] config fetch / LIFF init failed, using cached token:', err);
+        console.warn('[App] config/LIFF failed, using cached token:', err.message);
       }
 
       if (!this._token) {
+        clearTimeout(watchdog);
         document.getElementById('loading-screen').innerHTML =
-          '<p class="text-red-400 text-sm px-8 text-center">請先登入 LINE</p>';
+          '<p class="text-red-400 text-sm px-8 text-center mt-8">請先登入 LINE</p>';
         return;
       }
 
-      document.getElementById('loading-screen').style.display = 'none';
-      document.getElementById('app-screen').style.display     = 'block';
+      clearTimeout(watchdog);
+      this._forceOpen();   // 正常流程開門
 
-      this._bindNav();
-      this._bindGlobalCalendarDelegate();
+    } catch (criticalErr) {
+      clearTimeout(watchdog);
+      console.error('[App] init critical error:', criticalErr);
+      this._forceOpen();
+    }
+  }
+
+  /** 隱藏 loading、顯示 app、綁定導航 — 可安全重複呼叫 */
+  _forceOpen() {
+    try {
+      const ls = document.getElementById('loading-screen');
+      const as = document.getElementById('app-screen');
+      if (ls) ls.style.display = 'none';
+      if (as) as.style.display = 'block';
+
+      // 避免重複綁定
+      if (!this._navBound) {
+        this._navBound = true;
+        this._bindNav();
+        this._bindGlobalCalendarDelegate();
+        window.addEventListener('hashchange', () => this.navigate(window.location.hash));
+      }
 
       this.navigate(window.location.hash || '#dashboard');
       this.syncBackground().catch(e => console.warn('[Sync]', e));
-
-      window.addEventListener('hashchange', () => {
-        this.navigate(window.location.hash);
-      });
-
-    } catch (criticalErr) {
-      // 極端降級防線：任何意外崩潰仍保證開門
-      console.error('[App] init critical error, forcing navigate:', criticalErr);
-      try {
-        document.getElementById('loading-screen').style.display = 'none';
-        document.getElementById('app-screen').style.display     = 'block';
-        this._bindNav();
-        this.navigate('#dashboard');
-      } catch (_) { /* DOM 也爛了就放棄 */ }
-    }
+    } catch (_) { /* DOM 也爛了就放棄 */ }
   }
 
   /* ── LIFF 初始化 ─────────────────────────────── */
