@@ -542,6 +542,79 @@ async def get_conversations(
     return JSONResponse({"messages": messages, "count": len(messages)})
 
 
+@app.get("/api/snapshot")
+async def get_snapshot(user_id: str = Depends(get_current_user)):
+    """
+    本週即時快照 — 直接從 PostgreSQL 計算，不依賴 Redis
+    回傳格式與 weekly report 相容
+    """
+    from datetime import date as _date, timedelta
+    from services.weekly_scheduler import (
+        get_week_id, compute_stats, generate_weekly_summary
+    )
+    from services.db_persistent import (
+        get_messages_in_range, get_psych_in_range, get_pool
+    )
+
+    today    = _date.today()
+    mon      = today - timedelta(days=today.weekday())   # 本週一
+    week_id  = get_week_id(mon)
+
+    try:
+        messages   = await get_messages_in_range(user_id, mon, today)
+        psych_rows = await get_psych_in_range(user_id, mon, today)
+
+        if not messages:
+            return JSONResponse({"empty": True, "week_id": week_id})
+
+        stats = compute_stats(messages, psych_rows)
+
+        # AI 摘要（快取到 archives，避免每次都呼叫）
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            cached = await conn.fetchrow(
+                "SELECT summary, stats FROM archives WHERE user_id=$1 AND year_month=$2",
+                user_id, week_id
+            )
+
+        if cached and cached["summary"]:
+            cached_stats = dict(cached["stats"]) if cached["stats"] else {}
+            summary     = cached["summary"]
+            themes      = cached_stats.get("themes", [])
+            growth_note = cached_stats.get("growth_note", "")
+        else:
+            try:
+                summary, themes, growth_note = await generate_weekly_summary(
+                    messages, week_id
+                )
+                # 快取到 archives
+                from services.db_persistent import save_archive
+                await save_archive(
+                    user_id, week_id, summary,
+                    stats={**stats, "themes": themes, "growth_note": growth_note,
+                           "start": mon.isoformat(), "end": today.isoformat()},
+                    raw_count=len(messages),
+                )
+            except Exception as e:
+                print(f"[snapshot] AI summary failed: {e}")
+                summary = ""; themes = []; growth_note = ""
+
+        return JSONResponse({
+            "week_id":     week_id,
+            "start":       mon.isoformat(),
+            "end":         today.isoformat(),
+            "summary":     summary,
+            "themes":      themes,
+            "growth_note": growth_note,
+            "stats":       stats,
+            "raw_count":   len([m for m in messages if m["role"] == "user"]),
+            "empty":       False,
+        })
+    except Exception as e:
+        print(f"[snapshot] error: {e}")
+        return JSONResponse({"empty": True, "week_id": week_id, "error": str(e)})
+
+
 @app.get("/api/milestones")
 async def get_milestones_api(user_id: str = Depends(get_current_user)):
     """
@@ -644,28 +717,39 @@ async def sync_weekly(
     user_id: str = Depends(get_current_user),
 ):
     """
-    增量拉取週報，只回傳比 since 新的
-    query: since=2025-W03（可選，上次拉到的 week_id）
-    response: { reports: WeeklyReport[], count: int, has_more: bool }
+    增量拉取週報
+    優先從 Redis pop，fallback 從 PostgreSQL archives 讀
     """
+    reports = []
+
+    # 嘗試 Redis（有設定才用）
     try:
         from services.redis_client import (
             list_pending_weekly, pop_weekly_report, set_last_sync
         )
         week_ids = await list_pending_weekly(user_id)
-
         if since:
             week_ids = [w for w in week_ids if w > since]
-
-        reports = []
         for week_id in week_ids:
             report = await pop_weekly_report(user_id, week_id)
             if report:
                 reports.append(report)
                 await set_last_sync(user_id, week_id)
-    except Exception as e:
-        print(f"[sync_weekly] Error: {e}")
-        reports = []
+    except Exception:
+        pass  # Redis 未設定，走 PostgreSQL
+
+    # fallback / 補充：從 PostgreSQL archives 讀歷史週報
+    if not reports:
+        try:
+            from services.db_persistent import get_weekly_reports
+            db_reports = await get_weekly_reports(user_id, since=since or "")
+            # 排除和 Redis 已有的重複
+            existing_ids = {r["week_id"] for r in reports}
+            for r in db_reports:
+                if r["week_id"] not in existing_ids:
+                    reports.append(r)
+        except Exception as e:
+            print(f"[sync_weekly] DB fallback error: {e}")
 
     return JSONResponse({
         "reports":  reports,

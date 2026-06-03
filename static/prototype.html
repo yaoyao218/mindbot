@@ -1685,7 +1685,20 @@ async function refreshCurrentPage() {
    RENDER: SNAPSHOT
 ═══════════════════════════════════════════════ */
 async function renderSnapshot() {
-  const w = await Data.latestWeek();
+  // 先嘗試伺服器即時快照（不依賴 Redis 週報）
+  let w = null;
+  try {
+    const snap = await apiFetch('/api/snapshot');
+    if (snap && !snap.empty) {
+      w = snap;
+      // 存到 IDB 供離線使用
+      try { await IDB.put('weekly', { ...snap, week_id: snap.week_id }); } catch(e) {}
+    }
+  } catch(e) {
+    console.warn('[snapshot] server fetch failed, using IDB:', e);
+  }
+  // fallback：IDB 本地週報
+  if (!w) w = await Data.latestWeek();
   if (!w) { renderEmptySnapshot(); return; }
 
   const s = w.stats || {};

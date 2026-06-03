@@ -131,12 +131,26 @@ async def build_weekly_report(
         "created_at":  datetime.utcnow().isoformat(),
     }
 
-    # 存 Redis 等待用戶領取
-    await put_weekly_report(user_id, week_id, report)
+    # 存 PostgreSQL（永久）
+    try:
+        await save_archive(
+            user_id, week_id, summary,
+            stats={**stats, "themes": themes, "growth_note": growth_note,
+                   "start": start.isoformat(), "end": end.isoformat()},
+            raw_count=len(messages),
+        )
+    except Exception as e:
+        print(f"[weekly] save_archive failed: {e}")
+
+    # 存 Redis（如有設定，讓網站即時 pop）
+    try:
+        await put_weekly_report(user_id, week_id, report)
+    except Exception:
+        pass  # Redis 未設定時忽略
 
     # 刪除原始資料
     deleted = await delete_messages_in_range(user_id, start, end)
-    print(f"[weekly] {user_id} {week_id}: {deleted} msgs deleted, report queued")
+    print(f"[weekly] {user_id} {week_id}: {deleted} msgs deleted, report saved")
 
     return report
 

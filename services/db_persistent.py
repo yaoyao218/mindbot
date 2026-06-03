@@ -591,6 +591,43 @@ async def get_arousal_history_7d(user_id: str) -> list[int]:
 
 # ── Weekly Scheduler helpers ──────────────────────────────
 
+async def get_weekly_reports(user_id: str, since: str = "") -> list[dict]:
+    """從 archives 讀取週報，回傳格式與 Redis 週報相同"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        if since:
+            rows = await conn.fetch(
+                "SELECT year_month, summary, stats, raw_count, created_at "
+                "FROM archives WHERE user_id=$1 AND year_month > $2 "
+                "ORDER BY year_month DESC LIMIT 12",
+                user_id, since
+            )
+        else:
+            rows = await conn.fetch(
+                "SELECT year_month, summary, stats, raw_count, created_at "
+                "FROM archives WHERE user_id=$1 "
+                "ORDER BY year_month DESC LIMIT 12",
+                user_id
+            )
+        reports = []
+        for r in rows:
+            s = dict(r["stats"]) if r["stats"] else {}
+            reports.append({
+                "week_id":     r["year_month"],
+                "user_id":     user_id,
+                "start":       s.get("start", ""),
+                "end":         s.get("end", ""),
+                "summary":     r["summary"] or "",
+                "themes":      s.get("themes", []),
+                "growth_note": s.get("growth_note", ""),
+                "stats":       {k: v for k, v in s.items()
+                                if k not in ("themes", "growth_note", "start", "end")},
+                "raw_count":   r["raw_count"] or 0,
+                "created_at":  r["created_at"].isoformat() if r["created_at"] else "",
+            })
+        return reports
+
+
 async def get_users_in_range(start: date, end: date) -> list[str]:
     pool = await get_pool()
     async with pool.acquire() as conn:
