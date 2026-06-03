@@ -140,9 +140,8 @@ async def serve_app_v2():
 
 @app.get("/callback")
 async def oauth_callback():
-    """LINE Login OAuth redirect → 回到 SPA 由前端處理 code"""
-    # v2 LIFF 不走此路徑（LIFF 直接 redirect 回 /app-v2）
-    return FileResponse("static/prototype.html")
+    """LINE Login OAuth redirect → 回到 v2 SPA 由前端 LIFF SDK 處理 token"""
+    return FileResponse("static/public/index.html")
 
 
 def _make_session_token(user_id: str, display_name: str) -> str:
