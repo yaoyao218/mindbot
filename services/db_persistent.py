@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS session_psych (
     defense     VARCHAR(32),
     rupture     VARCHAR(32),
     method      VARCHAR(32),
+    end_quote   TEXT,
     created_at  TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_sp_user_turn ON session_psych (user_id, turn);
@@ -156,6 +157,10 @@ CREATE TABLE IF NOT EXISTS emotion_calendar (
     record_date     DATE         NOT NULL,
     emotion_emoji   VARCHAR(8),
     emotion_label   VARCHAR(32),
+    tarot_card      VARCHAR(60),
+    tarot_meaning   TEXT,
+    tarot_reversed  BOOLEAN      DEFAULT FALSE,
+    daily_narrative TEXT,
     UNIQUE (user_id, record_date)
 );
 
@@ -164,9 +169,27 @@ CREATE TABLE IF NOT EXISTS milestone_log (
     user_id         VARCHAR(64)  NOT NULL,
     milestone_days  SMALLINT     NOT NULL,
     observation     TEXT         DEFAULT '',
+    tarot_card      VARCHAR(60),
+    tarot_meaning   TEXT,
+    tarot_reversed  BOOLEAN      DEFAULT FALSE,
     triggered_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
     UNIQUE (user_id, milestone_days)
 );
+"""
+
+# 舊資料庫欄位補齊（冪等）
+_ALTER_TABLES = """
+ALTER TABLE emotion_calendar ADD COLUMN IF NOT EXISTS tarot_card      VARCHAR(60);
+ALTER TABLE emotion_calendar ADD COLUMN IF NOT EXISTS tarot_meaning   TEXT;
+ALTER TABLE emotion_calendar ADD COLUMN IF NOT EXISTS tarot_reversed  BOOLEAN DEFAULT FALSE;
+ALTER TABLE emotion_calendar ADD COLUMN IF NOT EXISTS daily_narrative TEXT;
+ALTER TABLE milestone_log    ADD COLUMN IF NOT EXISTS tarot_card      VARCHAR(60);
+ALTER TABLE milestone_log    ADD COLUMN IF NOT EXISTS tarot_meaning   TEXT;
+ALTER TABLE milestone_log    ADD COLUMN IF NOT EXISTS tarot_reversed  BOOLEAN DEFAULT FALSE;
+ALTER TABLE session_psych    ADD COLUMN IF NOT EXISTS end_quote        TEXT;
+ALTER TABLE session_psych    ADD COLUMN IF NOT EXISTS dialogue_insight TEXT;
+ALTER TABLE session_psych    ADD COLUMN IF NOT EXISTS quote_author     VARCHAR(100);
+ALTER TABLE session_psych    ADD COLUMN IF NOT EXISTS tarot_card       VARCHAR(50);
 """
 
 
@@ -174,6 +197,7 @@ async def init_db() -> None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(_CREATE_TABLES)
+        await conn.execute(_ALTER_TABLES)
     print("[DB] PostgreSQL tables initialized")
 
 
@@ -287,8 +311,9 @@ async def save_psych_state(user_id: str, psych: dict, turn: int) -> None:
         await conn.execute(
             """
             INSERT INTO session_psych
-            (user_id, turn, arousal, emotion, cognition, defense, rupture, method)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            (user_id, turn, arousal, emotion, cognition, defense, rupture, method,
+             end_quote, dialogue_insight, quote_author, tarot_card)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
             """,
             user_id, turn,
             psych.get("arousal_level"),
@@ -297,6 +322,10 @@ async def save_psych_state(user_id: str, psych: dict, turn: int) -> None:
             psych.get("defense_mechanism"),
             psych.get("alliance_rupture"),
             psych.get("method"),
+            psych.get("end_quote"),
+            psych.get("dialogue_insight"),
+            psych.get("quote_author"),
+            psych.get("tarot_card"),
         )
 
 
@@ -409,20 +438,70 @@ async def unlock_emotion_word(user_id: str, word_id: str) -> None:
 
 # ── Emotion Calendar ──────────────────────────────────────
 
-async def save_emotion_calendar(user_id: str, record_date: date,
-                                 emoji: str, label: str) -> None:
+async def save_emotion_calendar(
+    user_id: str, record_date: date,
+    emoji: str, label: str,
+    tarot_card: str = None, tarot_meaning: str = None, tarot_reversed: bool = False,
+) -> None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO emotion_calendar (user_id, record_date, emotion_emoji, emotion_label)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO emotion_calendar
+                (user_id, record_date, emotion_emoji, emotion_label,
+                 tarot_card, tarot_meaning, tarot_reversed)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (user_id, record_date) DO UPDATE SET
-                emotion_emoji = EXCLUDED.emotion_emoji,
-                emotion_label = EXCLUDED.emotion_label
+                emotion_emoji  = EXCLUDED.emotion_emoji,
+                emotion_label  = EXCLUDED.emotion_label,
+                tarot_card     = COALESCE(EXCLUDED.tarot_card,    emotion_calendar.tarot_card),
+                tarot_meaning  = COALESCE(EXCLUDED.tarot_meaning,  emotion_calendar.tarot_meaning),
+                tarot_reversed = COALESCE(EXCLUDED.tarot_reversed, emotion_calendar.tarot_reversed)
             """,
-            user_id, record_date, emoji, label
+            user_id, record_date, emoji, label, tarot_card, tarot_meaning, tarot_reversed
         )
+
+
+async def save_daily_narrative(user_id: str, record_date: date, narrative: str) -> None:
+    """更新或插入當天的 AI 敘述（不覆蓋已有的情緒/塔羅資料）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO emotion_calendar (user_id, record_date, daily_narrative)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, record_date) DO UPDATE SET
+                daily_narrative = EXCLUDED.daily_narrative
+            """,
+            user_id, record_date, narrative
+        )
+
+
+async def get_daily_record(user_id: str, record_date: date) -> dict:
+    """取得某天的完整日記錄（情緒 + 塔羅 + 敘述）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT record_date, emotion_emoji, emotion_label,
+                   tarot_card, tarot_meaning, tarot_reversed, daily_narrative
+            FROM emotion_calendar
+            WHERE user_id=$1 AND record_date=$2
+            """,
+            user_id, record_date
+        )
+    if not row:
+        return {"record_date": record_date.isoformat(), "found": False}
+    return {
+        "record_date":     row["record_date"].isoformat(),
+        "found":           True,
+        "emotion_emoji":   row["emotion_emoji"],
+        "emotion_label":   row["emotion_label"],
+        "tarot_card":      row["tarot_card"],
+        "tarot_meaning":   row["tarot_meaning"],
+        "tarot_reversed":  row["tarot_reversed"] or False,
+        "daily_narrative": row["daily_narrative"],
+    }
 
 
 async def get_emotion_calendar(user_id: str, year: int, month: int) -> list[dict]:
@@ -430,7 +509,8 @@ async def get_emotion_calendar(user_id: str, year: int, month: int) -> list[dict
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT record_date, emotion_emoji, emotion_label
+            SELECT record_date, emotion_emoji, emotion_label,
+                   tarot_card, tarot_meaning, tarot_reversed
             FROM emotion_calendar
             WHERE user_id=$1
               AND EXTRACT(YEAR FROM record_date)=$2
@@ -439,9 +519,14 @@ async def get_emotion_calendar(user_id: str, year: int, month: int) -> list[dict
             """,
             user_id, year, month
         )
-        return [{"record_date": r["record_date"].isoformat(),
-                 "emotion_emoji": r["emotion_emoji"],
-                 "emotion_label": r["emotion_label"]} for r in rows]
+        return [{
+            "record_date":    r["record_date"].isoformat(),
+            "emotion_emoji":  r["emotion_emoji"],
+            "emotion_label":  r["emotion_label"],
+            "tarot_card":     r["tarot_card"],
+            "tarot_meaning":  r["tarot_meaning"],
+            "tarot_reversed": r["tarot_reversed"] or False,
+        } for r in rows]
 
 
 async def get_streak_days(user_id: str) -> int:
@@ -474,28 +559,31 @@ async def get_streak_days(user_id: str) -> int:
 # ── Milestone Log ─────────────────────────────────────────
 
 async def check_and_mark_milestone(
-    user_id: str, days: int, observation: str = ""
+    user_id: str, days: int, observation: str = "",
+    tarot_card: str = None, tarot_meaning: str = None, tarot_reversed: bool = False,
 ) -> bool:
     """首次觸發回傳 True，已觸發過回傳 False"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
-            INSERT INTO milestone_log (user_id, milestone_days, observation)
-            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
+            INSERT INTO milestone_log
+                (user_id, milestone_days, observation, tarot_card, tarot_meaning, tarot_reversed)
+            VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING
             """,
-            user_id, days, observation
+            user_id, days, observation, tarot_card, tarot_meaning, tarot_reversed
         )
         return result == "INSERT 0 1"
 
 
 async def get_user_milestones(user_id: str) -> list[dict]:
-    """取得用戶所有已觸發的里程碑（含觀察文字）"""
+    """取得用戶所有已觸發的里程碑（含觀察文字和塔羅牌）"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT milestone_days, observation, triggered_at
+            SELECT milestone_days, observation, triggered_at,
+                   tarot_card, tarot_meaning, tarot_reversed
             FROM milestone_log WHERE user_id = $1
             ORDER BY milestone_days
             """,
@@ -503,9 +591,12 @@ async def get_user_milestones(user_id: str) -> list[dict]:
         )
         return [
             {
-                "days":        r["milestone_days"],
-                "observation": r["observation"] or "",
+                "days":         r["milestone_days"],
+                "observation":  r["observation"] or "",
                 "triggered_at": r["triggered_at"].isoformat() if r["triggered_at"] else "",
+                "tarot_card":   r["tarot_card"],
+                "tarot_meaning":r["tarot_meaning"],
+                "tarot_reversed": r["tarot_reversed"] or False,
             }
             for r in rows
         ]
@@ -609,9 +700,19 @@ async def get_weekly_reports(user_id: str, since: str = "") -> list[dict]:
                 "ORDER BY year_month DESC LIMIT 12",
                 user_id
             )
+        _TOP_LEVEL = {"themes", "growth_note", "start", "end",
+                      "end_quote", "dialogue_insight", "quote_author", "tarot_card"}
         reports = []
         for r in rows:
             s = dict(r["stats"]) if r["stats"] else {}
+            tarot_key  = s.get("tarot_card")
+            tarot_name = None
+            if tarot_key:
+                try:
+                    from services.tarot_quotes_pool import TAROT_POOL
+                    tarot_name = TAROT_POOL.get(tarot_key, {}).get("name_zh")
+                except Exception:
+                    pass
             reports.append({
                 "week_id":     r["year_month"],
                 "user_id":     user_id,
@@ -620,8 +721,15 @@ async def get_weekly_reports(user_id: str, since: str = "") -> list[dict]:
                 "summary":     r["summary"] or "",
                 "themes":      s.get("themes", []),
                 "growth_note": s.get("growth_note", ""),
-                "stats":       {k: v for k, v in s.items()
-                                if k not in ("themes", "growth_note", "start", "end")},
+                "end_quote":   s.get("end_quote"),
+                "psych_context": {
+                    "dialogue_insight": s.get("dialogue_insight"),
+                    "tarot_card":       tarot_key,
+                    "tarot_name_zh":    tarot_name,
+                    "end_quote":        s.get("end_quote"),
+                    "quote_author":     s.get("quote_author"),
+                },
+                "stats":       {k: v for k, v in s.items() if k not in _TOP_LEVEL},
                 "raw_count":   r["raw_count"] or 0,
                 "created_at":  r["created_at"].isoformat() if r["created_at"] else "",
             })
@@ -656,15 +764,23 @@ async def get_psych_in_range(user_id: str, start: date, end: date) -> list[dict]
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT arousal, emotion, cognition, created_at "
+            "SELECT arousal, emotion, cognition, end_quote, "
+            "       dialogue_insight, quote_author, tarot_card, created_at "
             "FROM session_psych "
             "WHERE user_id=$1 AND created_at::date BETWEEN $2 AND $3 "
             "ORDER BY created_at",
             user_id, start, end
         )
-        return [{"arousal": r["arousal"], "emotion": r["emotion"],
-                 "cognition": r["cognition"],
-                 "created_at": r["created_at"].isoformat()} for r in rows]
+        return [{
+            "arousal":          r["arousal"],
+            "emotion":          r["emotion"],
+            "cognition":        r["cognition"],
+            "end_quote":        r["end_quote"],
+            "dialogue_insight": r["dialogue_insight"],
+            "quote_author":     r["quote_author"],
+            "tarot_card":       r["tarot_card"],
+            "created_at":       r["created_at"].isoformat(),
+        } for r in rows]
 
 
 async def delete_messages_in_range(user_id: str, start: date, end: date) -> int:

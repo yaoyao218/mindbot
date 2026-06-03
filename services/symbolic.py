@@ -241,6 +241,102 @@ EMOTION_TO_TAROT_POOL = {
 }
 
 
+# 情緒 → 小阿爾克那花色映射
+EMOTION_TO_MINOR_SUIT = {
+    "焦慮":    "swords",
+    "憤怒":    "swords",
+    "悲傷":    "cups",
+    "委屈":    "cups",
+    "自我懷疑": "cups",
+    "疲憊":    "pents",
+    "迷茫":    "wands",
+    "空洞":    "wands",
+}
+
+# 里程碑用的大阿爾克那牌池（成長/旅程主題）
+MILESTONE_TAROT_POOL = [17, 20, 21, 0, 8, 14, 19]  # 星星、審判、世界、愚者、力量、節制、太陽
+
+
+def assign_tarot_structured(emotion: str, arousal: int) -> dict:
+    """
+    依情緒強度指派塔羅牌，回傳結構化 dict。
+    arousal 4–5 → 大阿爾克那
+    arousal 2–3 → 小阿爾克那（按花色）
+    arousal ≤1 或 平靜/釋然 → QUOTES 名言
+    """
+    calm_emotions = {"平靜", "釋然"}
+
+    # 名言模式
+    if arousal <= 1 or emotion in calm_emotions:
+        quotes = QUOTES.get(emotion, QUOTES["default"])
+        text = random.choice(quotes)
+        return {
+            "mode": "quote",
+            "card_name": None,
+            "card_full": None,
+            "meaning": text,
+            "is_reversed": False,
+            "suit": None,
+        }
+
+    # 小阿爾克那
+    if arousal in (2, 3):
+        suit = EMOTION_TO_MINOR_SUIT.get(emotion, "cups")
+        candidates = {k: v for k, v in MINOR_ARCANA.items() if k.startswith(suit)}
+        key, card = random.choice(list(candidates.items()))
+        is_reversed = random.random() < 0.3
+        meaning = card["reversed"] if is_reversed else card["upright"]
+        return {
+            "mode": "minor",
+            "card_name": card["name"],
+            "card_full": card["name"],
+            "meaning": meaning,
+            "is_reversed": is_reversed,
+            "suit": suit,
+        }
+
+    # 大阿爾克那（arousal 4–5）
+    pool = EMOTION_TO_TAROT_POOL.get(emotion, list(range(22)))
+    card_id = random.choice(pool)
+    card = MAJOR_ARCANA.get(card_id, random.choice(list(MAJOR_ARCANA.values())))
+    is_reversed = random.random() < 0.3
+    meaning = card["reversed"] if is_reversed else card["upright"]
+    name = card["name"].split(" ")[0]
+    return {
+        "mode": "major",
+        "card_name": name,
+        "card_full": card["name"],
+        "meaning": meaning,
+        "is_reversed": is_reversed,
+        "suit": None,
+    }
+
+
+def assign_milestone_tarot() -> dict:
+    """里程碑專用：固定從成長主題牌池選大阿爾克那"""
+    card_id = random.choice(MILESTONE_TAROT_POOL)
+    card = MAJOR_ARCANA[card_id]
+    is_reversed = random.random() < 0.2   # 里程碑偏向正位
+    meaning = card["reversed"] if is_reversed else card["upright"]
+    name = card["name"].split(" ")[0]
+    return {
+        "mode": "major",
+        "card_name": name,
+        "card_full": card["name"],
+        "meaning": meaning,
+        "is_reversed": is_reversed,
+        "suit": None,
+    }
+
+
+def format_tarot_reply(tarot: dict) -> str:
+    """將結構化 tarot dict 格式化為 LINE Bot 顯示文字"""
+    if tarot["mode"] == "quote":
+        return tarot["meaning"]
+    pos = "逆位" if tarot["is_reversed"] else "正位"
+    return f"【{tarot['card_name']}・{pos}】\n{tarot['meaning']}\n\n今晚就先到這裡。"
+
+
 def pick_tarot(emotion: str) -> str:
     """根據情緒挑選塔羅牌並生成輸出文字"""
     pool = EMOTION_TO_TAROT_POOL.get(emotion, list(range(22)))

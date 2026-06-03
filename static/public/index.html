@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>心事日記</title>
+
+<!-- LINE LIFF SDK（靜態載入；app.js 判斷 liff_id 後才 init）-->
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<!-- Tailwind CSS CDN（正式環境替換為 CLI 產出的 styles.min.css）-->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        glow: {
+          main:    '#0b0f19',
+          card:    '#131a26',
+          primary: '#6366f1',
+          accent:  '#f59e0b',
+          text:    '#e2e8f0',
+        },
+      },
+      animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+    },
+  },
+};
+</script>
+
+<style>
+:root { --bg-main:#0b0f19; --bg-card:#131a26; --color-text:#e2e8f0; }
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+body {
+  background:var(--bg-main); color:var(--color-text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden; min-height:100vh;
+  -webkit-tap-highlight-color:transparent;
+}
+
+/* 3D Card Flip */
+.tarot-card-container { perspective:1000px; }
+.tarot-card-inner { transform-style:preserve-3d; transition:transform .7s cubic-bezier(.4,0,.2,1); }
+.tarot-card-container.flipped .tarot-card-inner { transform:rotateY(180deg); }
+.backface-hidden { backface-visibility:hidden; -webkit-backface-visibility:hidden; }
+.rotate-Y-180 { transform:rotateY(180deg); }
+
+/* Skeleton（規格書：動畫名稱 loading）*/
+.skeleton {
+  background:linear-gradient(90deg,#131a26 25%,#1e293b 50%,#131a26 75%);
+  background-size:200% 100%; animation:loading 1.5s infinite;
+}
+@keyframes loading { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* 頁面進場 */
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.page-view { animation:fadeIn .35s ease both; padding-bottom:80px; min-height:100vh; }
+
+/* 底部 Nav */
+#bottom-nav {
+  position:fixed; bottom:0; left:0; right:0;
+  background:rgba(19,26,38,.96);
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  border-top:1px solid rgba(99,102,241,.12);
+  padding-bottom:env(safe-area-inset-bottom); z-index:50;
+}
+
+/* Toast */
+#toast {
+  position:fixed; bottom:90px; left:50%;
+  transform:translateX(-50%) translateY(20px);
+  background:rgba(99,102,241,.9); color:#fff;
+  font-size:13px; padding:8px 20px; border-radius:20px;
+  opacity:0; pointer-events:none;
+  transition:opacity .3s,transform .3s; z-index:100;
+}
+#toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* Modal */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.8);
+  display:flex; align-items:flex-end; justify-content:center;
+  z-index:60; animation:fadeIn .25s ease both;
+}
+.modal-sheet {
+  background:var(--bg-card);
+  border-radius:20px 20px 0 0;
+  border:1px solid rgba(99,102,241,.15); border-bottom:none;
+  width:100%; max-width:540px; padding:24px 20px;
+  padding-bottom:calc(24px + env(safe-area-inset-bottom));
+  max-height:85vh; overflow-y:auto;
+}
+
+/* 月曆塔羅標記 */
+.has-tarot { position:relative; }
+.has-tarot::after {
+  content:'✦'; position:absolute; top:3px; right:4px;
+  color:#f59e0b; font-size:9px; font-weight:700;
+}
+
+/* 載入畫面 */
+#loading-screen {
+  position:fixed; inset:0; background:var(--bg-main);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center; z-index:200;
+}
+</style>
+</head>
+<body>
+
+<!-- 載入畫面 -->
+<div id="loading-screen">
+  <span class="text-5xl mb-4" style="animation:none">🌿</span>
+  <p style="color:#475569;font-size:14px;letter-spacing:.12em">心事日記</p>
+</div>
+
+<!-- 主應用 -->
+<div id="app-screen" style="display:none">
+
+  <!-- 頂部標題欄 -->
+  <header class="sticky top-0 z-40 px-4 py-3 flex items-center justify-between"
+          style="background:rgba(11,15,25,.95);backdrop-filter:blur(12px);
+                 border-bottom:1px solid rgba(255,255,255,.05);
+                 padding-top:max(12px,env(safe-area-inset-top))">
+    <div class="flex items-center gap-2">
+      <span class="text-lg">🌿</span>
+      <span style="font-size:15px;font-weight:600;color:#e2e8f0;letter-spacing:.04em">心事日記</span>
+    </div>
+    <div class="flex items-center gap-1.5">
+      <div class="w-1.5 h-1.5 rounded-full bg-emerald-400/60"></div>
+      <span id="sync-label" style="font-size:11px;color:#475569">同步中…</span>
+    </div>
+  </header>
+
+  <!-- 規格書：唯一渲染容器 #app-runtime（所有頁面動態渲染於此）-->
+  <main id="app-runtime" class="page-view"></main>
+
+  <!-- 底部導航 -->
+  <nav id="bottom-nav" class="flex items-center justify-around py-2">
+    <button data-nav="dashboard"
+            class="flex flex-col items-center gap-1 px-5 py-1 text-glow-primary transition">
+      <span class="text-xl">📊</span>
+      <span class="text-xs font-medium">本週</span>
+    </button>
+    <button data-nav="calendar"
+            class="flex flex-col items-center gap-1 px-5 py-1 text-slate-500 transition">
+      <span class="text-xl">🌙</span>
+      <span class="text-xs font-medium">月曆</span>
+    </button>
+    <button data-nav="timeline"
+            class="flex flex-col items-center gap-1 px-5 py-1 text-slate-500 transition">
+      <span class="text-xl">💬</span>
+      <span class="text-xs font-medium">對話</span>
+    </button>
+    <button data-nav="settings"
+            class="flex flex-col items-center gap-1 px-5 py-1 text-slate-500 transition">
+      <span class="text-xl">⚙️</span>
+      <span class="text-xs font-medium">設定</span>
+    </button>
+  </nav>
+
+</div>
+
+<div id="toast"></div>
+
+<!--
+  規格書：app.js 掛載 window.MindBotApp = new AppController()
+  並由 DOMContentLoaded 自動呼叫 init()，此處不需手動呼叫。
+-->
+<script type="module" src="../src/app.js"></script>
+
+</body>
+</html>

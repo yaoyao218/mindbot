@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>心事日記</title>
+<!-- LIFF SDK：在 LIFF 容器內會靜默初始化；在一般瀏覽器中由 tryLiffLogin() 動態降級 -->
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Noto+Sans+TC:wght@300;400&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════════
@@ -400,6 +402,157 @@ body {
   border-radius: 0 8px 8px 0;
 }
 
+/* ── 名言字卡（週報/快照） ── */
+.end-quote-card {
+  margin: 16px 0 0;
+  padding: 16px 20px;
+  border-left: 2px solid var(--gold-dim);
+  background: rgba(201,168,76,.04);
+  border-radius: 0 8px 8px 0;
+}
+.end-quote-card-text {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--text);
+  line-height: 1.8;
+}
+.end-quote-card-meta {
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: .1em;
+  margin-top: 8px;
+}
+
+/* ── 本週代表牌（快照頁） ── */
+.snap-tarot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+  border-radius: 20px;
+  padding: 3px 10px;
+  margin-top: 10px;
+  letter-spacing: .06em;
+}
+
+/* ── Tarot Fallback Card ── */
+.tarot-fallback-card {
+  text-align: center;
+  padding: 28px 20px;
+  border: 1px dashed var(--gold-dim);
+  border-radius: 12px;
+  background: rgba(201,168,76,.03);
+  margin: 4px 0;
+}
+.tarot-fallback-card .fallback-icon { font-size: 2.2rem; margin-bottom: 8px; }
+.tarot-fallback-card h4 {
+  color: var(--gold); font-size: 14px; font-weight: 600;
+  margin: 0 0 8px; letter-spacing: .04em;
+}
+.tarot-fallback-card p {
+  color: var(--text-faint); font-size: 12px; line-height: 1.7; margin: 0;
+}
+
+/* ── 低度參與降級卡片（is_low_engagement） ── */
+.low-engagement-card {
+  background: linear-gradient(135deg, #0d1a2e 0%, #141c26 60%, #1a1a2e 100%);
+  border: 1px solid rgba(100,120,200,.18);
+  border-radius: 14px;
+  padding: 28px 24px;
+  margin-bottom: 20px;
+}
+.low-engagement-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #c9a84c;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  margin-bottom: 16px;
+}
+.low-engagement-summary {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 14px;
+  color: #b0bec5;
+  line-height: 1.9;
+  margin-bottom: 20px;
+}
+.low-engagement-quote-block {
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding-top: 16px;
+}
+.low-engagement-quote-text {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 17px;
+  color: #e8e0d0;
+  line-height: 1.75;
+  margin-bottom: 8px;
+}
+.low-engagement-quote-author {
+  text-align: right;
+  font-size: 11px;
+  color: #c9a84c;
+  letter-spacing: .1em;
+}
+.low-engagement-tarot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #c9a84c;
+  border: 1px solid rgba(201,168,76,.25);
+  border-radius: 20px;
+  padding: 3px 10px;
+  margin-bottom: 16px;
+  letter-spacing: .06em;
+}
+.low-engagement-insight {
+  font-size: 13px;
+  color: #78909c;
+  font-style: italic;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+
+/* ── Insight-Quote Card（週報 / 快照） ── */
+.insight-quote-card {
+  margin: 14px 0 0;
+  padding: 16px 18px;
+  background: rgba(201,168,76,.04);
+  border-left: 2px solid var(--gold-dim);
+  border-radius: 0 10px 10px 0;
+}
+.insight-text {
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.75;
+  margin: 0 0 12px;
+}
+.insight-divider {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,.07);
+  margin: 10px 0;
+}
+.insight-quote-text {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--gold);
+  line-height: 1.8;
+}
+.insight-quote-author {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: right;
+  margin-top: 6px;
+  letter-spacing: .06em;
+}
+
 /* ── Canvas Charts ── */
 .chart-container { position: relative; width: 100%; }
 canvas { display: block; width: 100% !important; }
@@ -561,6 +714,29 @@ canvas { display: block; width: 100% !important; }
 }
 .settings-row:last-child { border-bottom: none; }
 .settings-label { font-size: 14px; color: var(--text); }
+/* ── Settings Toggle Switch ── */
+.settings-toggle { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
+.settings-toggle input { opacity: 0; width: 0; height: 0; }
+.settings-toggle-track {
+  position: absolute; inset: 0;
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 12px; cursor: pointer;
+  transition: background .2s, border-color .2s;
+}
+.settings-toggle-track::after {
+  content: ''; position: absolute;
+  left: 3px; top: 3px;
+  width: 16px; height: 16px;
+  background: var(--text-faint);
+  border-radius: 50%;
+  transition: transform .2s, background .2s;
+}
+.settings-toggle input:checked + .settings-toggle-track {
+  background: var(--green); border-color: var(--green);
+}
+.settings-toggle input:checked + .settings-toggle-track::after {
+  transform: translateX(18px); background: #fff;
+}
 .settings-sub { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
 .settings-action {
   font-size: 13px; color: var(--text-soft);
@@ -752,7 +928,9 @@ canvas { display: block; width: 100% !important; }
   border: 1px solid var(--border-2);
   border-radius: var(--r);
   padding: 16px 20px;
-  min-width: 240px; max-width: 320px;
+  min-width: 280px; max-width: 360px;
+  max-height: 75vh;
+  overflow-y: auto;
   z-index: 200;
   box-shadow: 0 8px 32px rgba(0,0,0,.4);
   animation: slideUp .2s ease both;
@@ -770,6 +948,94 @@ canvas { display: block; width: 100% !important; }
   position: absolute; top: 10px; right: 12px;
   background: none; border: none; color: var(--text-faint);
   cursor: pointer; font-size: 14px;
+}
+
+/* ── 塔羅牌小卡 ── */
+.tarot-card-mini {
+  border: 1px solid var(--gold-dim);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: rgba(201,168,76,.05);
+}
+.tarot-card-name {
+  font-size: 12px;
+  color: var(--gold);
+  letter-spacing: .1em;
+  margin-bottom: 6px;
+  font-family: 'Noto Serif TC', serif;
+}
+.tarot-card-meaning {
+  font-size: 12px;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+.cal-detail-narrative {
+  font-size: 12px;
+  color: var(--text-soft);
+  line-height: 1.8;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+}
+.cal-narrative-btn {
+  margin-top: 8px;
+  background: none;
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: .06em;
+}
+.cal-narrative-btn:hover { background: rgba(201,168,76,.08); }
+
+/* ── 里程碑塔羅區塊 ── */
+.milestone-tarot {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.milestone-tarot-name {
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: .1em;
+  margin-bottom: 4px;
+}
+.milestone-tarot-meaning {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.7;
+}
+
+/* ── 對話紀錄：每日日記卡 ── */
+.chat-daily-recap {
+  margin: 8px 0 16px;
+  border-left: 2px solid var(--gold-dim);
+  padding: 10px 14px;
+  background: rgba(201,168,76,.04);
+  border-radius: 0 8px 8px 0;
+}
+.chat-daily-recap-header {
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: .1em;
+  margin-bottom: 6px;
+}
+.chat-daily-recap-text {
+  font-size: 12px;
+  color: var(--text-soft);
+  line-height: 1.8;
+}
+.chat-daily-tarot-chip {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+  margin-top: 6px;
+  letter-spacing: .04em;
 }
 
 /* Emotion Distribution Bars */
@@ -939,6 +1205,13 @@ canvas { display: block; width: 100% !important; }
 .chat-date-sep { text-align:center; font-size:11px; color:var(--text-faint); margin:16px 0 8px; }
 .chat-time { font-size:10px; color:var(--text-faint); align-self:flex-end; flex-shrink:0; padding-bottom:2px; }
 </style>
+<!-- LINE LIFF SDK（動態載入，LIFF_ID 未設定時自動跳過） -->
+<script>
+  (function() {
+    // LIFF ID 由後端 /api/config 提供；若未設定則整個 LIFF 區塊不執行
+    window._LIFF_READY = false;
+  })();
+</script>
 </head>
 <body>
 
@@ -1075,6 +1348,11 @@ canvas { display: block; width: 100% !important; }
             <div class="card-title">本週摘要</div>
             <p class="summary-text" id="snap-summary"></p>
             <div class="tag-row" style="margin-top:16px" id="snap-tags"></div>
+            <div id="snap-tarot-wrap" style="display:none;margin-top:12px">
+              <span class="snap-tarot-chip" id="snap-tarot-chip"></span>
+              <div id="snap-end-quote" style="display:none"></div>
+            </div>
+            <div id="snap-insight" style="display:none"></div>
           </div>
           <div class="card" style="display:flex;flex-direction:column;gap:16px">
             <div>
@@ -1125,6 +1403,8 @@ canvas { display: block; width: 100% !important; }
             <div class="card">
               <div class="card-title">週報摘要</div>
               <p class="summary-text" id="detail-summary"></p>
+              <div id="detail-end-quote" style="display:none"></div>
+              <div id="detail-insight" style="display:none"></div>
             </div>
             <div class="card">
               <div class="card-title">臨床脈絡</div>
@@ -1239,6 +1519,24 @@ canvas { display: block; width: 100% !important; }
             <div class="settings-group-title">隱私</div>
             <div class="settings-row">
               <div>
+                <div class="settings-label">本地日記備份</div>
+                <div class="settings-sub">雲端無痕・本地留痕：原始對話永久保存在此裝置，雲端週一自動清除</div>
+              </div>
+              <label class="settings-toggle" title="開啟後，每週同步完成後本裝置仍保留所有對話紀錄">
+                <input type="checkbox" id="toggle-local-backup" onchange="onLocalBackupToggle(this.checked)">
+                <span class="settings-toggle-track"></span>
+              </label>
+            </div>
+            <div style="margin:4px 0 8px;padding:12px 14px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border)">
+              <div style="font-size:11px;color:var(--text-faint);line-height:1.8;letter-spacing:.02em">
+                🔒 <strong style="color:var(--text-soft)">隱私防護說明</strong><br>
+                MindBot 為了保護您的隱私，每週一凌晨會完全銷毀伺服器上的原始對話文字。
+                開啟此功能後，網頁會將對話加密儲存在您<strong style="color:var(--text)">當前這台裝置（IndexedDB）</strong>中。
+                若關閉此功能或清除瀏覽器資料，本地對話記錄將隨之消失，且無法從伺服器恢復。
+              </div>
+            </div>
+            <div class="settings-row">
+              <div>
                 <div class="settings-label">資料保留期</div>
                 <div class="settings-sub">一週未登入後自動刪除雲端原始資料</div>
               </div>
@@ -1347,6 +1645,20 @@ canvas { display: block; width: 100% !important; }
           <div class="cal-detail-date" id="cal-detail-date"></div>
           <span class="cal-detail-emoji" id="cal-detail-emoji">😐</span>
           <div class="cal-detail-label" id="cal-detail-label"></div>
+          <!-- 塔羅牌區塊 -->
+          <div id="cal-detail-tarot" style="display:none;margin-top:14px">
+            <div class="tarot-card-mini">
+              <div class="tarot-card-name" id="cal-detail-tarot-name"></div>
+              <div class="tarot-card-meaning" id="cal-detail-tarot-meaning"></div>
+            </div>
+          </div>
+          <!-- AI 每日敘述 -->
+          <div id="cal-detail-narrative-wrap" style="margin-top:12px">
+            <div class="cal-detail-narrative" id="cal-detail-narrative" style="display:none"></div>
+            <button class="cal-narrative-btn" id="cal-narrative-btn" onclick="loadDayNarrative()" style="display:none">
+              生成今日敘述
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1384,12 +1696,58 @@ async function loadConfig() {
   try {
     const r = await fetch('/api/config');
     const data = await r.json();
-    if (data.line_login_channel_id) {
-      CFG.LINE_CLIENT_ID = data.line_login_channel_id;
-    }
+    if (data.line_login_channel_id) CFG.LINE_CLIENT_ID = data.line_login_channel_id;
+    if (data.liff_id) CFG.LIFF_ID = data.liff_id;
   } catch(e) {
     console.warn('[Config] Failed to load config:', e);
   }
+}
+
+/**
+ * LIFF 登入流程
+ * 1. 動態載入 LIFF SDK script
+ * 2. liff.init() → liff.login()（未登入時）
+ * 3. 取得 accessToken → 與後端交換 session token
+ * 回傳 true 表示 LIFF 登入成功，false 表示 LIFF 不可用（fallback 到 LINE OAuth）
+ */
+async function tryLiffLogin() {
+  if (!CFG.LIFF_ID) return false;
+  try {
+    // 動態載入 SDK（避免沒有 LIFF_ID 時也要請求外部資源）
+    if (!window.liff) {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    await liff.init({ liffId: CFG.LIFF_ID });
+    window._LIFF_READY = true;
+
+    if (!liff.isLoggedIn()) {
+      liff.login({ redirectUri: location.href });
+      return true; // 頁面將跳轉，不繼續執行
+    }
+
+    // 已登入：取 accessToken → 與後端交換 session token
+    const lineToken = liff.getAccessToken();
+    const profile   = await liff.getProfile();
+    const resp = await fetch('/api/auth/line_callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ liff_token: lineToken }),
+    });
+    if (resp.ok) {
+      const { token, user_id, name } = await resp.json();
+      Auth.set(token, user_id, name || profile.displayName);
+      console.log('[LIFF] Login success:', user_id);
+      return true;
+    }
+  } catch(e) {
+    console.warn('[LIFF] Failed, fallback to LINE OAuth:', e);
+  }
+  return false;
 }
 
 const EMOTION_LABEL = {
@@ -1406,21 +1764,27 @@ const IDB = (() => {
   function open() {
     if (db) return Promise.resolve(db);
     return new Promise((res, rej) => {
-      // v3: conversations 改用 msg_key 做 keyPath（去重）
-      const req = indexedDB.open('mindbot', 3);
+      // v4: 新增 user_settings store（key/value 用戶偏好設定）
+      const req = indexedDB.open('mindbot', 4);
       req.onupgradeneeded = e => {
-        const d = e.target.result;
+        const d   = e.target.result;
+        const old = e.oldVersion;
         if (!d.objectStoreNames.contains('weekly')) {
           const s = d.createObjectStore('weekly', { keyPath: 'week_id' });
           s.createIndex('user_id', 'user_id');
         }
-        // 舊版 conversations（autoIncrement）→ 刪掉重建
-        if (d.objectStoreNames.contains('conversations')) {
+        // v3 以前：舊版 conversations（autoIncrement）→ 刪掉重建
+        if (old < 3 && d.objectStoreNames.contains('conversations')) {
           d.deleteObjectStore('conversations');
         }
-        // 新版：msg_key = created_at + role，確保去重
-        const cs = d.createObjectStore('conversations', { keyPath: 'msg_key' });
-        cs.createIndex('created_at', 'created_at');
+        if (!d.objectStoreNames.contains('conversations')) {
+          const cs = d.createObjectStore('conversations', { keyPath: 'msg_key' });
+          cs.createIndex('created_at', 'created_at');
+        }
+        // v4 新增：用戶本地設定（key → value）
+        if (!d.objectStoreNames.contains('user_settings')) {
+          d.createObjectStore('user_settings', { keyPath: 'key' });
+        }
       };
       req.onsuccess = e => { db = e.target.result; res(db); };
       req.onerror = () => rej(req.error);
@@ -1463,7 +1827,22 @@ const IDB = (() => {
     if (!all.length) return null;
     return all.map(r => r.week_id).sort().at(-1);
   }
-  return { open, put, getAll, getOne, clearStore, lastWeekId };
+  // 用戶設定：getSetting / setSetting（IDB 為主，localStorage 為降級）
+  async function getSetting(key, fallback = null) {
+    try {
+      const rec = await getOne('user_settings', key);
+      if (rec !== undefined) return rec.value;
+    } catch(e) {}
+    // localStorage 降級（相容舊版）
+    const ls = localStorage.getItem('pref_' + key);
+    return ls !== null ? ls === '1' || ls : fallback;
+  }
+  async function setSetting(key, value) {
+    try { await put('user_settings', { key, value, updated_at: Date.now() }); } catch(e) {}
+    // 同步寫 localStorage（相容舊版讀取）
+    localStorage.setItem('pref_' + key, value === true ? '1' : value === false ? '0' : String(value));
+  }
+  return { open, put, getAll, getOne, clearStore, lastWeekId, getSetting, setSetting };
 })();
 
 /* ═══════════════════════════════════════════════
@@ -1532,9 +1911,16 @@ const Sync = {
       for (const r of reports) await IDB.put('weekly', r);
 
       // 2. 拉取對話緩衝（新訊息存入 IDB，去重）
+      //    若「本地日記備份」開啟 → 保留現有 conversations，僅 append 新訊息
+      //    若關閉（預設）→ 原有行為
+      const localBackup = !!(await IDB.getSetting('local_backup', false));
       const { messages = [] } = await apiFetch('/api/sync/conversations');
       if (messages.length) {
-        await _saveConvsToIDB(messages);
+        await _saveConvsToIDB(messages);          // _saveConvsToIDB 本身已去重（msg_key）
+        if (!localBackup) {
+          // 非備份模式：只保留 server 回來的那一批（舊資料自然被新的週報覆蓋後，下次清 IDB 時消失）
+          // 此處不主動刪除，讓 server 側的 delete_messages_in_range 負責雲端清理
+        }
         _chatMessages = await _loadConvsFromIDB();
       }
 
@@ -1682,6 +2068,27 @@ async function refreshCurrentPage() {
 }
 
 /* ═══════════════════════════════════════════════
+   SHARED: insight-quote-card renderer
+═══════════════════════════════════════════════ */
+function _renderInsightQuoteCard(pc) {
+  const insight    = pc.dialogue_insight || '';
+  const quote      = pc.end_quote        || '';
+  const author     = pc.quote_author     || '';
+  const insightHtml = insight
+    ? `<p class="insight-text">${escHtml(insight)}</p><hr class="insight-divider">`
+    : '';
+  const authorHtml = author
+    ? `<div class="insight-quote-author">—— ${escHtml(author)}</div>`
+    : '';
+  return `
+    <div class="insight-quote-card">
+      ${insightHtml}
+      <div class="insight-quote-text">「${escHtml(quote)}」</div>
+      ${authorHtml}
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════
    RENDER: SNAPSHOT
 ═══════════════════════════════════════════════ */
 async function renderSnapshot() {
@@ -1689,23 +2096,37 @@ async function renderSnapshot() {
   let w = null;
   try {
     const snap = await apiFetch('/api/snapshot');
-    if (snap && !snap.empty) {
+    if (snap) {
       w = snap;
-      // 存到 IDB 供離線使用
-      try { await IDB.put('weekly', { ...snap, week_id: snap.week_id }); } catch(e) {}
+      if (!snap.empty) {
+        try { await IDB.put('weekly', { ...snap, week_id: snap.week_id }); } catch(e) {}
+      }
     }
   } catch(e) {
     console.warn('[snapshot] server fetch failed, using IDB:', e);
   }
-  // fallback：IDB 本地週報
-  if (!w) w = await Data.latestWeek();
+  // fallback：IDB 本地週報（但保留本週空白狀態的週期資訊）
+  const currentWeekEmpty = w?.empty && w?.is_current_week;
+  if (!w || (w.empty && !w.is_current_week)) w = await Data.latestWeek();
   if (!w) { renderEmptySnapshot(); return; }
 
   const s = w.stats || {};
+  const isCurrent = w.is_current_week === true || currentWeekEmpty;
 
-  // Header
-  document.querySelector('#page-snapshot .page-sub').textContent =
-    `${w.week_id} ・ ${w.start} ～ ${w.end}`;
+  // ── 低度參與週（is_low_engagement 旗標）→ 降級美化渲染 ──
+  if (w.is_low_engagement) {
+    _renderLowEngagementSnapshot(w);
+    return;
+  }
+
+  // Header：顯示完整週期 Mon-Sun，加「進行中」標記
+  const weekLabel = document.querySelector('#page-snapshot .page-sub');
+  if (weekLabel) {
+    const range = `${w.week_id} ・ ${w.start} ～ ${w.end}`;
+    weekLabel.innerHTML = isCurrent
+      ? `${range} &nbsp;<span style="font-size:10px;background:var(--green);color:#fff;padding:2px 7px;border-radius:10px;letter-spacing:.06em;vertical-align:middle">進行中</span>`
+      : range;
+  }
 
   // Stats
   setEl('snap-arousal', s.avg_arousal?.toFixed(1) ?? '—');
@@ -1713,25 +2134,153 @@ async function renderSnapshot() {
   setEl('snap-days',    Object.keys(s.daily_counts || {}).length || '—');
 
   // Text
-  setEl('snap-summary', w.summary || '');
+  setEl('snap-summary', w.summary || (isCurrent ? '對話累積中，稍後自動生成本週摘要…' : ''));
   setEl('snap-growth',  w.growth_note || '');
 
   // Tags
   const tagRow = document.getElementById('snap-tags');
   if (tagRow) tagRow.innerHTML = (w.themes || []).map(t => `<span class="tag">${t}</span>`).join('');
 
+  // 本週代表牌
+  const tarotWrap = document.getElementById('snap-tarot-wrap');
+  const tarotChip = document.getElementById('snap-tarot-chip');
+  const endQuoteEl = document.getElementById('snap-end-quote');
+  if (tarotWrap && tarotChip) {
+    const wt = w.week_tarot;
+    if (wt && wt.card) {
+      const pos = wt.reversed ? '・逆位' : '・正位';
+      tarotChip.textContent = `✦ ${wt.card}${pos}`;
+      tarotWrap.style.display = '';
+    } else {
+      tarotWrap.style.display = 'none';
+    }
+    if (endQuoteEl && w.end_quote) {
+      endQuoteEl.innerHTML = `
+        <div class="end-quote-card" style="margin-top:10px">
+          <div class="end-quote-card-text">「${escHtml(w.end_quote)}」</div>
+          <div class="end-quote-card-meta">本週情緒封存</div>
+        </div>`;
+      endQuoteEl.style.display = '';
+    } else if (endQuoteEl) {
+      endQuoteEl.style.display = 'none';
+    }
+
+    // insight-quote-card（psych_context）
+    const insightEl = document.getElementById('snap-insight');
+    const pc = w.psych_context || {};
+    if (insightEl && (pc.dialogue_insight || pc.end_quote)) {
+      insightEl.innerHTML = _renderInsightQuoteCard(pc);
+      insightEl.style.display = '';
+    } else if (insightEl) {
+      insightEl.style.display = 'none';
+    }
+  }
+
   // Charts（defer raf）
   requestAnimationFrame(() => {
+    // 情緒強度曲線
     const curve = (s.arousal_curve || []).map(p => p.v);
-    if (curve.length >= 2) {
-      drawLineChart('arousal-canvas', curve, '#4a7c59', null, 1, 5);
+    const padTo2 = arr => arr.length === 1 ? [arr[0], arr[0]] : arr; // 單點補齊讓折線可畫
+
+    // Fallback 卡：資料不足時取代空白 canvas
+    const msgCount = w.raw_count || 0;
+    if (curve.length === 0 && msgCount < 3) {
+      const canvas = document.getElementById('arousal-canvas');
+      if (canvas) canvas.parentElement.innerHTML = `
+        <div class="tarot-fallback-card">
+          <div class="fallback-icon">🎴</div>
+          <h4>本週心靈能量蓄積中</h4>
+          <p>目前悄悄話還不夠多，去 LINE 找 MindBot 聊聊<br>即可解鎖心靈原型與每週金句。</p>
+        </div>`;
+    } else if (curve.length >= 1) {
+      drawLineChart('arousal-canvas', padTo2(curve), '#4a7c59', null, 1, 5);
+    } else {
+      // 備用：每日訊息數量折線圖
+      const daily = s.daily_counts || {};
+      const days  = Object.keys(daily).sort();
+      const vals  = days.map(d => daily[d]);
+      if (vals.length >= 1) {
+        const max = Math.max(...vals, 1);
+        drawLineChart('arousal-canvas', padTo2(vals), '#4a7c59', padTo2(days.map(d => d.slice(5))), 0, max);
+      } else {
+        // 完全無資料：顯示提示文字
+        const canvas = document.getElementById('arousal-canvas');
+        if (canvas) {
+          const dpr = window.devicePixelRatio || 1;
+          const W = canvas.parentElement.offsetWidth || 300;
+          canvas.width  = W * dpr; canvas.height = 80 * dpr;
+          canvas.style.width = W + 'px'; canvas.style.height = '80px';
+          const ctx = canvas.getContext('2d');
+          ctx.scale(dpr, dpr);
+          ctx.fillStyle = 'rgba(168,152,128,.25)';
+          ctx.font = '13px Noto Sans TC';
+          ctx.textAlign = 'center';
+          ctx.fillText('對話後將顯示情緒強度曲線', W / 2, 44);
+        }
+      }
     }
+
+    // 情緒分佈長條圖
     const emotionData = Object.entries(s.emotion_counts || {})
       .map(([k, v]) => ({ name: EMOTION_LABEL[k] || k, count: v }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 4);
-    if (emotionData.length) drawEmotionBars('emotion-bars-snapshot', emotionData);
+      .slice(0, 5);
+    if (emotionData.length) {
+      drawEmotionBars('emotion-bars-snapshot', emotionData);
+    } else if (isCurrent) {
+      const el = document.getElementById('emotion-bars-snapshot');
+      if (el) el.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:8px 0">情緒資料累積中…</div>';
+    }
   });
+}
+
+// 快照頁每 5 分鐘自動更新（讓本週數據持續反映最新狀態）
+let _snapRefreshTimer = null;
+function startSnapRefresh() {
+  if (_snapRefreshTimer) clearInterval(_snapRefreshTimer);
+  _snapRefreshTimer = setInterval(async () => {
+    if (currentPage === 'snapshot' && Auth.getToken()) {
+      await renderSnapshot();
+    }
+  }, 5 * 60 * 1000);
+}
+
+function _renderLowEngagementSnapshot(w) {
+  const pc     = w.psych_context || {};
+  const quote  = pc.end_quote  || w.end_quote  || '照顧好自己，是自我保護。';
+  const author = pc.quote_author               || '心事日記';
+  const insight = pc.dialogue_insight          || '';
+  const tarotName = pc.tarot_name_zh           || '';
+  const summary   = w.summary || '這週的你選擇把心事暫時闔上，給了自己一段安靜沉澱的空間。';
+  const weekLabel = document.querySelector('#page-snapshot .page-sub');
+  if (weekLabel) weekLabel.innerHTML = `${w.week_id} ・ ${w.start} ～ ${w.end}`;
+
+  // 將統計數字清零，避免顯示空白破折號
+  setEl('snap-arousal', '—'); setEl('snap-turns', '0'); setEl('snap-days', '0');
+  setEl('snap-summary', ''); setEl('snap-growth', '');
+
+  // 找到 snap-summary 所在的 card，整體替換為降級卡
+  const snapCard = document.getElementById('snap-summary')?.closest('.card');
+  if (!snapCard) return;
+
+  const tarotChip = tarotName
+    ? `<div class="low-engagement-tarot-chip">🔮 ${escHtml(tarotName)}</div>`
+    : '';
+  const insightBlock = insight
+    ? `<p class="low-engagement-insight">${escHtml(insight)}</p>`
+    : '';
+
+  snapCard.innerHTML = `
+    <div class="low-engagement-card">
+      <div class="low-engagement-header">🌙 本週的留白充電</div>
+      <p class="low-engagement-summary">${escHtml(summary)}</p>
+      ${tarotChip}
+      ${insightBlock}
+      <div class="low-engagement-quote-block">
+        <div class="low-engagement-quote-text">「${escHtml(quote)}」</div>
+        <div class="low-engagement-quote-author">—— ${escHtml(author)}</div>
+      </div>
+    </div>`;
 }
 
 function renderEmptySnapshot() {
@@ -1793,10 +2342,42 @@ async function renderDetail(weekId) {
   // Text
   setEl('detail-summary',  w.summary || '');
   setEl('detail-growth',   w.growth_note || '');
-  setEl('detail-belief',   w.stats?.clinical_core_belief || '—');
-  setEl('detail-pattern',  w.stats?.behavioral_pattern   || '—');
-  setEl('detail-issues',   w.stats?.unresolved_issues    || '—');
-  setEl('detail-alliance', w.stats?.alliance_history     || '—');
+  setEl('detail-pattern',  w.stats?.behavioral_pattern || '—');
+  setEl('detail-issues',   w.stats?.unresolved_issues  || '—');
+  setEl('detail-alliance', w.stats?.alliance_history   || '—');
+
+  // 核心信念 / Tarot Archetype（psych_context 優先）
+  const pc = w.psych_context || {};
+  if (pc.tarot_name_zh) {
+    setEl('detail-belief', `🔮 潛意識盲點：${pc.tarot_name_zh}`);
+  } else {
+    setEl('detail-belief', w.stats?.clinical_core_belief || '—');
+  }
+
+  // 名言字卡（若有 end_quote）
+  const detailQuoteEl = document.getElementById('detail-end-quote');
+  if (detailQuoteEl) {
+    const eq = w.end_quote || s.end_quote || pc.end_quote;
+    if (eq) {
+      detailQuoteEl.innerHTML = `
+        <div class="end-quote-card">
+          <div class="end-quote-card-text">「${escHtml(eq)}」</div>
+          <div class="end-quote-card-meta">本週情緒封存</div>
+        </div>`;
+      detailQuoteEl.style.display = '';
+    } else {
+      detailQuoteEl.style.display = 'none';
+    }
+  }
+
+  // insight-quote-card（psych_context）
+  const detailInsightEl = document.getElementById('detail-insight');
+  if (detailInsightEl && (pc.dialogue_insight || pc.end_quote)) {
+    detailInsightEl.innerHTML = _renderInsightQuoteCard(pc);
+    detailInsightEl.style.display = '';
+  } else if (detailInsightEl) {
+    detailInsightEl.style.display = 'none';
+  }
 
   // Chart
   requestAnimationFrame(() => {
@@ -1864,9 +2445,29 @@ async function renderTrends() {
 /* ═══════════════════════════════════════════════
    RENDER: SETTINGS
 ═══════════════════════════════════════════════ */
-function renderSettings() {
+async function renderSettings() {
   setEl('settings-name',     Auth.getName() + '・已連結');
   setEl('settings-lastsync', sessionStorage.getItem('mb_lastsync') || '未知');
+  // 從 IDB user_settings 還原本地備份 toggle 狀態（含 localStorage 降級）
+  const tog = document.getElementById('toggle-local-backup');
+  if (tog) {
+    try {
+      tog.checked = !!(await IDB.getSetting('local_backup', false));
+    } catch(e) {
+      tog.checked = localStorage.getItem('pref_local_backup') === '1';
+    }
+  }
+}
+
+async function onLocalBackupToggle(checked) {
+  await IDB.setSetting('local_backup', checked);  // IDB 主要存儲（含 localStorage 雙寫）
+  showToast(checked
+    ? '本地日記備份已開啟：對話將永久保存在此裝置 🔒'
+    : '本地日記備份已關閉：對話隨雲端週期自動清除');
+  // 關閉時：立即清空本地 conversations（隱私保護）
+  if (!checked) {
+    try { await IDB.clearStore('conversations'); } catch(e) {}
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -2072,9 +2673,15 @@ async function renderCalendar() {
     const rec = byDate[dateStr];
     const isToday = dateStr === todayStr;
     const cls = ['cal-day', rec ? 'has-record' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
-    html += `<div class="${cls}" onclick="openCalDay('${dateStr}','${rec ? rec.emotion_emoji : ''}','${rec ? (EMOJI_LABEL[rec.emotion_emoji]||'') : ''}')">
+    const tarotJson = rec ? encodeURIComponent(JSON.stringify({
+      card: rec.tarot_card || null,
+      meaning: rec.tarot_meaning || null,
+      reversed: rec.tarot_reversed || false,
+    })) : '';
+    html += `<div class="${cls}" onclick="openCalDay('${dateStr}','${rec ? rec.emotion_emoji : ''}','${rec ? (EMOJI_LABEL[rec.emotion_emoji]||rec.emotion_label||'') : ''}','${tarotJson}')">
       <span class="cal-day-num">${d}</span>
       ${rec ? `<span class="cal-day-emoji">${rec.emotion_emoji}</span>` : '<span class="cal-day-dot"></span>'}
+      ${rec && rec.tarot_card ? `<span style="font-size:8px;color:var(--gold-dim);display:block;text-align:center;line-height:1">✦</span>` : ''}
     </div>`;
   }
   grid.innerHTML = html;
@@ -2170,14 +2777,87 @@ async function renderCalKeywords() {
   } catch { kwCard.style.display = 'none'; }
 }
 
-function openCalDay(date, emoji, label) {
+let _calDetailDate = '';
+
+function openCalDay(date, emoji, label, tarotJson) {
   const popup = document.getElementById('cal-detail-popup');
   if (!popup) return;
+  _calDetailDate = date;
+
   document.getElementById('cal-detail-date').textContent  = date;
   document.getElementById('cal-detail-emoji').textContent = emoji || '😐';
   document.getElementById('cal-detail-label').textContent = label || '無記錄';
+
+  // 塔羅區塊
+  const tarotWrap = document.getElementById('cal-detail-tarot');
+  const tarotName = document.getElementById('cal-detail-tarot-name');
+  const tarotMeaning = document.getElementById('cal-detail-tarot-meaning');
+  let tarotInfo = null;
+  try { if (tarotJson) tarotInfo = JSON.parse(decodeURIComponent(tarotJson)); } catch(e) {}
+
+  if (tarotInfo && tarotInfo.card) {
+    const pos = tarotInfo.reversed ? '・逆位' : '・正位';
+    tarotName.textContent    = `【${tarotInfo.card}${pos}】`;
+    tarotMeaning.textContent = tarotInfo.meaning || '';
+    tarotWrap.style.display  = '';
+  } else {
+    tarotWrap.style.display = 'none';
+  }
+
+  // 敘述區塊（先清空，再觸發 lazy 載入）
+  const narrativeEl = document.getElementById('cal-detail-narrative');
+  const narrativeBtn = document.getElementById('cal-narrative-btn');
+  narrativeEl.style.display  = 'none';
+  narrativeEl.textContent    = '';
+  narrativeBtn.style.display = 'none';
+
   popup.classList.add('show');
+
+  // 非同步載入敘述
+  _loadCalDayNarrative(date);
 }
+
+async function _loadCalDayNarrative(date) {
+  const narrativeEl  = document.getElementById('cal-detail-narrative');
+  const narrativeBtn = document.getElementById('cal-narrative-btn');
+  if (!narrativeEl || !narrativeBtn || !Auth.getToken()) return;
+  try {
+    const data = await apiFetch(`/api/daily-record?date=${date}`);
+    if (data.daily_narrative) {
+      narrativeEl.textContent   = data.daily_narrative;
+      narrativeEl.style.display = '';
+      narrativeBtn.style.display = 'none';
+    } else {
+      // 有對話紀錄但還沒有敘述 → 顯示生成按鈕
+      narrativeBtn.style.display = '';
+    }
+  } catch(e) {
+    narrativeBtn.style.display = '';
+  }
+}
+
+async function loadDayNarrative() {
+  const btn = document.getElementById('cal-narrative-btn');
+  const narrativeEl = document.getElementById('cal-detail-narrative');
+  if (!btn || !narrativeEl || !_calDetailDate) return;
+  btn.textContent  = '生成中…';
+  btn.disabled     = true;
+  try {
+    const data = await apiFetch(`/api/daily-record?date=${_calDetailDate}`);
+    if (data.daily_narrative) {
+      narrativeEl.textContent   = data.daily_narrative;
+      narrativeEl.style.display = '';
+      btn.style.display         = 'none';
+    } else {
+      btn.textContent = '暫無內容';
+    }
+  } catch(e) {
+    btn.textContent = '生成失敗，請稍後再試';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function closeCalDetail() {
   const popup = document.getElementById('cal-detail-popup');
   if (popup) popup.classList.remove('show');
@@ -2230,6 +2910,12 @@ async function renderMilestones() {
     }
 
     if (unlocked) {
+      const a = achievedMap[m.days];
+      const tarotBlock = (a && a.tarot_card) ? `
+        <div class="milestone-tarot">
+          <div class="milestone-tarot-name">【${escHtml(a.tarot_card)}${a.tarot_reversed ? '・逆位' : '・正位'}】</div>
+          <div class="milestone-tarot-meaning">${escHtml(a.tarot_meaning || '')}</div>
+        </div>` : '';
       return `
         <div class="milestone-card">
           <div class="milestone-day-badge">
@@ -2239,6 +2925,7 @@ async function renderMilestones() {
           <div class="milestone-title">${m.subtitle}</div>
           ${emojiRow}
           ${obs ? `<div class="milestone-analysis">${escHtml(obs)}</div>` : ''}
+          ${tarotBlock}
         </div>`;
     } else {
       const lockedMsg = m.locked_msg.replace('{left}', left);
@@ -2331,13 +3018,37 @@ async function renderChat() {
 
   if (sub) sub.textContent = `共 ${msgs.length} 則訊息`;
 
+  // 收集有對話的日期，用於稍後注入日記卡
+  const datesWithMsgs = new Set();
+  msgs.forEach(m => { if (m.created_at) datesWithMsgs.add(m.created_at.slice(0, 10)); });
+
+  // 預先載入各天的日記錄（靜默，不阻塞渲染）
+  const dailyRecords = {};
+  if (Auth.getToken()) {
+    await Promise.allSettled(
+      [...datesWithMsgs].map(async d => {
+        try {
+          const r = await apiFetch(`/api/daily-record?date=${d}`);
+          if (r && (r.daily_narrative || r.tarot_card)) dailyRecords[d] = r;
+        } catch(e) {}
+      })
+    );
+  }
+
+  // 建立以日期為鍵的「最後一則訊息」索引，用於在正確位置注入日記卡
+  const lastMsgIdxByDate = {};
+  msgs.forEach((m, i) => {
+    const d = (m.created_at || '').slice(0, 10);
+    if (d) lastMsgIdxByDate[d] = i;
+  });
+
   let lastDate = '';
-  const html = msgs.map(m => {
-    const role = m.role || 'user';
-    const text = escHtml(m.content || '');
-    const ts   = m.created_at || '';
-    const date = ts ? ts.slice(0, 10) : '';
-    const time = ts ? ts.slice(11, 16) : '';
+  const parts = msgs.map((m, i) => {
+    const role   = m.role || 'user';
+    const text   = escHtml(m.content || '');
+    const ts     = m.created_at || '';
+    const date   = ts ? ts.slice(0, 10) : '';
+    const time   = ts ? ts.slice(11, 16) : '';
     const avatar = role === 'user' ? '🙂' : '🌙';
 
     let sep = '';
@@ -2346,16 +3057,32 @@ async function renderChat() {
       lastDate = date;
     }
 
-    return `${sep}
+    const msgHtml = `${sep}
     <div class="chat-msg ${role}">
       <div class="chat-avatar">${avatar}</div>
       <div class="chat-bubble">${text}</div>
       ${time ? `<div class="chat-time">${time}</div>` : ''}
     </div>`;
-  }).join('');
 
-  log.innerHTML = html;
-  // 捲到最下面
+    // 如果這是當天最後一則訊息，且有日記資料 → 注入日記卡
+    let recapHtml = '';
+    if (date && lastMsgIdxByDate[date] === i && dailyRecords[date]) {
+      const rec = dailyRecords[date];
+      const tarotChip = rec.tarot_card
+        ? `<span class="chat-daily-tarot-chip">✦ ${escHtml(rec.tarot_card)}${rec.tarot_reversed ? '・逆位' : '・正位'}</span>`
+        : '';
+      recapHtml = `
+      <div class="chat-daily-recap">
+        <div class="chat-daily-recap-header">🌙 今日記憶</div>
+        <div class="chat-daily-recap-text">${escHtml(rec.daily_narrative || '')}</div>
+        ${tarotChip}
+      </div>`;
+    }
+
+    return msgHtml + recapHtml;
+  });
+
+  log.innerHTML = parts.join('');
   log.scrollTop = log.scrollHeight;
 }
 
@@ -2522,13 +3249,27 @@ function patchText(wrapId, cls, newId, dflt) {
 
   initOffline();
 
-  // ── 步驟 4：處理 OAuth callback ─────────────────────
-  const wasCallback = await handleOAuthCallback();
+  // ── 步驟 4a：嘗試 LIFF 登入（優先，若 LIFF_ID 已設定）──
+  let liffLoggedIn = false;
+  if (!Auth.getToken() && CFG.LIFF_ID) {
+    liffLoggedIn = await tryLiffLogin();
+  }
 
-  // ── 步驟 5：設定登入按鈕 ────────────────────────────
-  if (!wasCallback && !Auth.getToken()) {
+  // ── 步驟 4b：處理 LINE OAuth callback（LIFF 未使用時）──
+  const wasCallback = liffLoggedIn ? false : await handleOAuthCallback();
+
+  // ── 步驟 5：設定登入按鈕（LIFF 和 OAuth 都未登入時顯示）──
+  if (!wasCallback && !liffLoggedIn && !Auth.getToken()) {
     const loginBtn = document.getElementById('line-login-btn');
-    if (loginBtn) loginBtn.href = Auth.buildLineURL();
+    if (loginBtn) {
+      // 若有 LIFF_ID，按鈕改為觸發 LIFF 登入
+      if (CFG.LIFF_ID) {
+        loginBtn.href = '#';
+        loginBtn.onclick = e => { e.preventDefault(); tryLiffLogin(); };
+      } else {
+        loginBtn.href = Auth.buildLineURL();
+      }
+    }
   }
 
   // ── 步驟 6：顯示 App（還沒顯示的話）────────────────
@@ -2541,6 +3282,7 @@ function patchText(wrapId, cls, newId, dflt) {
     try { await renderSnapshot(); }    catch(e) { console.warn('[init] renderSnapshot:', e); }
     try { await loadConversations(); } catch(e) { console.warn('[init] loadConv:', e); }
     try { await Sync.run(true); }      catch(e) { console.warn('[init] sync:', e); }
+    startSnapRefresh();  // 每 5 分鐘自動更新快照
   }
 
   // ── 支援瀏覽器上下頁切換 ────────────────────────────

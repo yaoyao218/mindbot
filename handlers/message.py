@@ -119,6 +119,35 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     text = event.message.text.strip()
     reply_token = event.reply_token
 
+    # ── 分散式鎖：防止同一用戶連發訊息造成 Race Condition ──
+    _lock_acquired = False
+    try:
+        from services.redis_client import acquire_user_lock, release_user_lock
+        _lock_acquired = await acquire_user_lock(user_id)
+        if not _lock_acquired:
+            await _reply(reply_token,
+                "你的上一則訊息還在處理中，請稍等一下 🌿", line_bot_api)
+            return
+    except Exception:
+        # Redis 未設定時略過鎖（允許繼續處理）
+        _lock_acquired = False
+
+    try:
+        await _handle_message_inner(event, line_bot_api)
+    finally:
+        if _lock_acquired:
+            try:
+                from services.redis_client import release_user_lock
+                await release_user_lock(user_id)
+            except Exception:
+                pass
+
+
+async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi):
+    user_id = event.source.user_id
+    text = event.message.text.strip()
+    reply_token = event.reply_token
+
     # ── 關鍵字路由 ────────────────────────────────────────
     if any(kw in text.lower() for kw in CHECKIN_KEYWORDS):
         await send_checkin_flex(reply_token, line_bot_api)
@@ -208,6 +237,8 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         await _reply(reply_token, crisis_msg, line_bot_api)
         await append_message(user_id, "bot", crisis_msg)
         session["in_dialog"] = False
+        # 開啟 3 輪高風險追蹤，避免 AI 下一輪「失憶」
+        session.setdefault("psych", {})["crisis_cooldown_turns"] = 3
         await save_session(user_id, session)
         return
 
@@ -218,6 +249,48 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     total_turn = session.get("total_turn", 0) + 1
     session["total_turn"] = total_turn
     session["in_dialog"] = True
+
+    # ── TarotProjectiveModule：STAGNANT 敷衍回覆時發塔羅緩衝牌 ──
+    if fp_result.state_label == "STAGNANT" and session.get("in_dialog"):
+        try:
+            from services.tarot_quotes_pool import pick_projective_card, pool_key_to_card_dict
+            from services.tarot_projective import build_covered_card_flex
+            _emotion_now = session.get("psych", {}).get("emotion", "迷茫")
+            # 防禦機制存在時優先走認知投射路徑
+            _dimension = "cognition" if session.get("psych", {}).get("defense_mechanism") else "emotion"
+            _proj_key  = pick_projective_card(_emotion_now, _dimension)
+            _card = pool_key_to_card_dict(_proj_key)
+            session["pending_tarot_flip"]       = _card
+            session["current_projective_card"]  = _proj_key   # 供收尾時存入 psych
+            await save_session(user_id, session)
+            await line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=reply_token,
+                    messages=[FlexMessage(
+                        alt_text="偵測到你可能有點累，先抽一張牌吧 🔮",
+                        contents=FlexContainer.from_dict(build_covered_card_flex())
+                    )]
+                )
+            )
+        except Exception as e:
+            print(f"[TarotProjective] Failed: {e}")
+            await _reply(reply_token, "嗯，有時候說不出來也沒關係，你還在就好。", line_bot_api)
+        return
+
+    # ── P1 臨床診斷（在 Companion 前執行，供 Rupture Repair 判斷）──
+    try:
+        from services.clinical_diagnosis import diagnose as _diagnose
+        dx = await _diagnose(text, session.get("history", []), total_turn)
+        session.setdefault("psych", {})
+        session["psych"]["alliance_rupture"] = (
+            dx.alliance_rupture if dx.alliance_rupture != "NONE" else None
+        )
+        session["psych"]["defense_mechanism"] = (
+            dx.defense_mechanism if dx.defense_mechanism != "NONE" else None
+        )
+    except Exception as e:
+        print(f"[ClinicalDx] Failed: {e}")
+        session.setdefault("psych", {})
 
     # ── 主對話：4步接話 Companion ─────────────────────────
     try:
@@ -235,6 +308,24 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         session["psych"]["emotion"] = emotion
     except Exception:
         emotion = session.get("psych", {}).get("emotion", "平靜") or "平靜"
+
+    # 儲存 psych 狀態到 DB（情緒強度曲線用）
+    _EMOTION_AROUSAL = {
+        "憤怒": 4, "焦慮": 4,
+        "委屈": 3, "疲憊": 3, "悲傷": 3, "自我懷疑": 3, "複雜混合": 3,
+        "迷茫": 2, "空洞": 2, "平靜": 2, "釋然": 2,
+    }
+    arousal_val = _EMOTION_AROUSAL.get(emotion, 3)
+    session["psych"]["arousal_level"] = arousal_val
+    try:
+        from services.db_persistent import save_psych_state as _sps
+        await _sps(
+            user_id,
+            {**session["psych"], "arousal_level": arousal_val},
+            total_turn
+        )
+    except Exception:
+        pass
 
     # ── 攔截器（禁用語過濾）──────────────────────────────
     reply_text = process_response(raw_reply, fp_result)
@@ -254,10 +345,75 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     # C. 對話結尾感 + 象徵系統
     closing_triggered = should_show_closing(session, 2)  # companion 不做 arousal 判斷
 
-    if detect_closing_signal(text) and session.get("in_dialog"):
-        # 用戶說了收尾語 → 象徵結尾
-        symbol_msg = select_symbol(emotion)
-        reply_text = reply_text.rstrip() + "\n\n" + symbol_msg
+    # quick context：3 輪後自動觸發 SummaryModule（提前收尾）
+    _quick_forced_close = (
+        session.get("current_context") == "quick"
+        and total_turn >= 3
+        and not session.get("quick_closed")
+    )
+    if _quick_forced_close:
+        session["quick_closed"] = True   # 只觸發一次
+
+    _is_closing = (
+        (detect_closing_signal(text) and session.get("in_dialog"))
+        or _quick_forced_close
+    )
+    _closure_flex = None   # 收尾 Flex Message（若有）
+
+    if _is_closing:
+        # 用戶說了收尾語 → SummaryModule：insight + quote + tarot + Flex 字卡
+        try:
+            from services.symbolic import assign_tarot_structured
+            from services.tarot_projective import build_closure_flex, generate_dialogue_insight
+            from services.tarot_quotes_pool import fetch_quote_by_emotion
+            from services.db_persistent import save_emotion_calendar
+            import datetime as _dt
+
+            arousal_val = _EMOTION_AROUSAL.get(emotion, 3)
+            tarot       = assign_tarot_structured(emotion, arousal_val)
+
+            # 1. AI 生成 30–50 字對話洞察
+            dialogue_insight = ""
+            try:
+                dialogue_insight = await generate_dialogue_insight(
+                    session.get("history", [])
+                )
+            except Exception as _e:
+                print(f"[Closure] insight failed: {_e}")
+
+            # 2. 哲人名言（含作者）
+            quote_data   = fetch_quote_by_emotion(emotion)
+            quote_text   = quote_data["text"]
+            quote_author = quote_data["author"]
+
+            # 3. 儲存塔羅到情緒月曆
+            if tarot.get("card_name"):
+                await save_emotion_calendar(
+                    user_id, _dt.date.today(),
+                    session.get("psych", {}).get("emotion_emoji", "😐"),
+                    emotion,
+                    tarot_card=tarot["card_name"],
+                    tarot_meaning=tarot["meaning"],
+                    tarot_reversed=tarot.get("is_reversed", False),
+                )
+
+            # 4. 寫入 psych（供 save_psych_state 帶入）
+            session["psych"]["end_quote"]        = quote_text
+            session["psych"]["quote_author"]     = quote_author
+            session["psych"]["dialogue_insight"] = dialogue_insight
+            session["psych"]["tarot_card"]       = session.get("current_projective_card")
+
+            # 5. 準備 Flex 字卡
+            _closure_flex = build_closure_flex(
+                quote_text,
+                tarot["mode"] != "quote",
+                tarot.get("card_name"),
+                quote_author,
+                dialogue_insight,
+            )
+        except Exception as e:
+            print(f"[Closure] Flex build failed: {e}")
+            reply_text = reply_text.rstrip() + "\n\n" + select_symbol(emotion)
     elif closing_triggered:
         reply_text = reply_text.rstrip() + "\n\n" + get_closing_prompt(session)
 
@@ -284,15 +440,35 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     except Exception:
         pass
 
+    # 危機冷卻計數器遞減（每輪 -1，歸零後不再注入脈絡）
+    cooldown = session.get("psych", {}).get("crisis_cooldown_turns", 0)
+    if cooldown > 0:
+        session["psych"]["crisis_cooldown_turns"] = cooldown - 1
+
     # 回覆並儲存
     session["history"].append({"role": "bot", "text": reply_text})
-    # 限制 history 長度，避免 token 爆炸
     if len(session["history"]) > 30:
         session["history"] = session["history"][-24:]
 
     await save_session(user_id, session)
     await append_message(user_id, "bot", reply_text)
-    await _reply(reply_token, reply_text, line_bot_api)
+
+    if _closure_flex:
+        # 收尾：AI 回覆 + Flex 字卡，合併成一次 reply（兩則）
+        await line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=reply_token,
+                messages=[
+                    TextMessage(text=reply_text),
+                    FlexMessage(
+                        alt_text="🌙 今日日記已封存",
+                        contents=FlexContainer.from_dict(_closure_flex)
+                    ),
+                ]
+            )
+        )
+    else:
+        await _reply(reply_token, reply_text, line_bot_api)
 
 
 # ════════════════════════════════════════════════════════════
@@ -305,6 +481,22 @@ async def handle_checkin_supplement(event, line_bot_api, session, text):
     reply_token = event.reply_token
     pending = session["pending_checkin"]
     checkin_emotion = pending.get("emotion", "")
+
+    # 簽到後指派塔羅並儲存（共用邏輯）
+    async def _assign_checkin_tarot(emoji: str, label: str, emotion_key: str) -> str:
+        from handlers.postback import CHECKIN_EMOTION_TO_CN
+        from services.symbolic import assign_tarot_structured, format_tarot_reply
+        from services.db_persistent import save_emotion_calendar
+        import datetime as _dt
+        emotion_cn, arousal_val = CHECKIN_EMOTION_TO_CN.get(emotion_key, ("平靜", 1))
+        tarot = assign_tarot_structured(emotion_cn, arousal_val)
+        await save_emotion_calendar(
+            user_id, _dt.date.today(), emoji, label,
+            tarot_card=tarot.get("card_name"),
+            tarot_meaning=tarot.get("meaning"),
+            tarot_reversed=tarot.get("is_reversed", False),
+        )
+        return format_tarot_reply(tarot)
 
     if text == "跳過":
         await save_checkin(user_id, {
@@ -320,10 +512,16 @@ async def handle_checkin_supplement(event, line_bot_api, session, text):
         except Exception:
             streak = 0
         checkin_resp = format_checkin_response(streak, emoji)
+        tarot_text = ""
+        try:
+            tarot_text = await _assign_checkin_tarot(emoji, label, checkin_emotion)
+        except Exception:
+            pass
         await save_session(user_id, session)
-        await _reply(reply_token,
-            f"{checkin_resp}\n\n如果之後想聊聊，隨時傳訊息給我。",
-            line_bot_api)
+        reply_body = f"{checkin_resp}\n\n如果之後想聊聊，隨時傳訊息給我。"
+        if tarot_text:
+            reply_body = f"{checkin_resp}\n\n{tarot_text}"
+        await _reply(reply_token, reply_body, line_bot_api)
         await send_website_link_push(user_id, line_bot_api)
     else:
         result = await analyze_checkin(text, checkin_emotion)
@@ -344,9 +542,17 @@ async def handle_checkin_supplement(event, line_bot_api, session, text):
         except Exception:
             streak = 0
         checkin_resp = format_checkin_response(streak, emoji)
+        tarot_text = ""
+        try:
+            tarot_text = await _assign_checkin_tarot(emoji, label, checkin_emotion)
+        except Exception:
+            pass
         await save_session(user_id, session)
         reflection = result.get("reflection", "謝謝你願意說出來。")
-        await _reply(reply_token, f"{checkin_resp}\n\n{reflection}", line_bot_api)
+        reply_body = f"{checkin_resp}\n\n{reflection}"
+        if tarot_text:
+            reply_body += f"\n\n{tarot_text}"
+        await _reply(reply_token, reply_body, line_bot_api)
         await send_website_link_push(user_id, line_bot_api)
 
 

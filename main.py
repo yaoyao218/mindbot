@@ -128,13 +128,20 @@ async def health_check():
 
 @app.get("/app")
 async def serve_app():
-    """心事日記 Web App 主頁"""
+    """心事日記 Web App 主頁（舊版 prototype.html）"""
     return FileResponse("static/prototype.html")
+
+
+@app.get("/app-v2")
+async def serve_app_v2():
+    """心事日記 Web App v2（模組化 LIFF SPA）"""
+    return FileResponse("static/public/index.html")
 
 
 @app.get("/callback")
 async def oauth_callback():
     """LINE Login OAuth redirect → 回到 SPA 由前端處理 code"""
+    # v2 LIFF 不走此路徑（LIFF 直接 redirect 回 /app-v2）
     return FileResponse("static/prototype.html")
 
 
@@ -258,10 +265,11 @@ async def serve_report():
 
 @app.get("/api/config")
 async def get_config():
-    """前端啟動時呼叫，取得 LINE Login Channel ID 等設定"""
+    """前端啟動時呼叫，取得 LINE Login Channel ID、LIFF ID 等設定"""
     return JSONResponse({
         "line_login_channel_id": os.environ.get("LINE_LOGIN_CHANNEL_ID", ""),
-        "app_url": os.environ.get("APP_URL", "https://web-production-dd506.up.railway.app"),
+        "liff_id":               os.environ.get("LIFF_ID", ""),          # 有設定才啟用 LIFF
+        "app_url":               os.environ.get("APP_URL", "https://web-production-dd506.up.railway.app"),
     })
 
 
@@ -334,11 +342,34 @@ async def get_current_user(request: Request) -> str:
 @app.post("/api/auth/line_callback")
 async def line_callback(request: Request):
     """
-    前端用 LINE Login code 換取 access token
-    body: { code, redirect_uri }
-    response: { token, user_id, display_name }
+    前端登入回呼，支援兩種模式：
+      1. LINE OAuth（傳統）：body { code, redirect_uri }
+      2. LIFF：body { liff_token }  → 直接驗證 access token，跳過 code exchange
+    response: { token, user_id, name }
     """
     body = await request.json()
+
+    # ── LIFF 模式：直接驗證 access token ─────────────────
+    liff_token = body.get("liff_token")
+    if liff_token:
+        async with httpx.AsyncClient(timeout=10) as client:
+            profile_r = await client.get(
+                "https://api.line.me/v2/profile",
+                headers={"Authorization": f"Bearer {liff_token}"},
+            )
+        if profile_r.status_code != 200:
+            raise HTTPException(status_code=401, detail="LIFF token invalid")
+        profile = profile_r.json()
+        # 簽發我們自己的 session token（讓後續 API 呼叫不需要一直打 LINE）
+        from services.login_token import create_token
+        our_token = create_token(profile["userId"])
+        return JSONResponse({
+            "token":   our_token,
+            "user_id": profile["userId"],
+            "name":    profile.get("displayName", ""),
+        })
+
+    # ── LINE OAuth 模式（傳統）────────────────────────────
     code = body.get("code")
     redirect_uri = body.get("redirect_uri")
 
@@ -553,19 +584,27 @@ async def get_snapshot(user_id: str = Depends(get_current_user)):
         get_week_id, compute_stats, generate_weekly_summary
     )
     from services.db_persistent import (
-        get_messages_in_range, get_psych_in_range, get_pool
+        get_messages_in_range, get_psych_in_range, get_pool, get_emotion_calendar
     )
 
     today    = _date.today()
     mon      = today - timedelta(days=today.weekday())   # 本週一
+    sun      = mon + timedelta(days=6)                   # 本週日
     week_id  = get_week_id(mon)
 
     try:
+        # 查詢到今天為止的資料（週日前持續累積）
         messages   = await get_messages_in_range(user_id, mon, today)
         psych_rows = await get_psych_in_range(user_id, mon, today)
 
         if not messages:
-            return JSONResponse({"empty": True, "week_id": week_id})
+            return JSONResponse({
+                "empty":   True,
+                "week_id": week_id,
+                "start":   mon.isoformat(),
+                "end":     sun.isoformat(),
+                "is_current_week": True,
+            })
 
         stats = compute_stats(messages, psych_rows)
 
@@ -577,38 +616,99 @@ async def get_snapshot(user_id: str = Depends(get_current_user)):
                 user_id, week_id
             )
 
+        import time as _time
+        now_ts = _time.time()
+
+        # 快取邏輯：6 小時內不重算，讓摘要每天能反映最新狀態
+        SUMMARY_TTL = 6 * 3600
+        cache_ok = False
         if cached and cached["summary"]:
-            cached_stats = dict(cached["stats"]) if cached["stats"] else {}
-            summary     = cached["summary"]
-            themes      = cached_stats.get("themes", [])
-            growth_note = cached_stats.get("growth_note", "")
-        else:
+            cs = dict(cached["stats"]) if cached["stats"] else {}
+            cached_at = cs.get("summary_cached_at", 0)
+            if now_ts - float(cached_at) < SUMMARY_TTL:
+                summary     = cached["summary"]
+                themes      = cs.get("themes", [])
+                growth_note = cs.get("growth_note", "")
+                cache_ok    = True
+
+        if not cache_ok:
             try:
                 summary, themes, growth_note = await generate_weekly_summary(
                     messages, week_id
                 )
-                # 快取到 archives
                 from services.db_persistent import save_archive
                 await save_archive(
                     user_id, week_id, summary,
                     stats={**stats, "themes": themes, "growth_note": growth_note,
-                           "start": mon.isoformat(), "end": today.isoformat()},
+                           "start": mon.isoformat(), "end": sun.isoformat(),
+                           "summary_cached_at": str(now_ts)},
                     raw_count=len(messages),
                 )
             except Exception as e:
                 print(f"[snapshot] AI summary failed: {e}")
                 summary = ""; themes = []; growth_note = ""
 
+        # 本週代表牌：從 emotion_calendar 取最新有塔羅的記錄
+        week_tarot     = None
+        week_end_quote = None
+        psych_context  = {}
+        try:
+            cal_recs = await get_emotion_calendar(user_id, mon.year, mon.month)
+            week_days = {(mon + timedelta(days=i)).isoformat() for i in range(7)}
+            tarot_recs = [r for r in cal_recs if r.get("tarot_card") and r["record_date"] in week_days]
+            if tarot_recs:
+                latest = sorted(tarot_recs, key=lambda x: x["record_date"])[-1]
+                week_tarot = {
+                    "card":     latest["tarot_card"],
+                    "meaning":  latest["tarot_meaning"],
+                    "reversed": latest.get("tarot_reversed", False),
+                }
+
+            # 最近一筆含 psych_context 的收尾記錄（本週內）
+            async with pool.acquire() as conn:
+                pc_row = await conn.fetchrow(
+                    """SELECT end_quote, dialogue_insight, quote_author, tarot_card
+                       FROM session_psych
+                       WHERE user_id=$1 AND created_at::date >= $2
+                         AND (end_quote IS NOT NULL OR dialogue_insight IS NOT NULL)
+                       ORDER BY created_at DESC LIMIT 1""",
+                    user_id, mon
+                )
+            if pc_row:
+                week_end_quote = pc_row["end_quote"]
+                tarot_key      = pc_row["tarot_card"]
+                tarot_name     = None
+                if tarot_key:
+                    try:
+                        from services.tarot_quotes_pool import TAROT_POOL
+                        tarot_name = TAROT_POOL.get(tarot_key, {}).get("name_zh")
+                    except Exception:
+                        pass
+                psych_context = {
+                    "dialogue_insight": pc_row["dialogue_insight"],
+                    "tarot_card":       tarot_key,
+                    "tarot_name_zh":    tarot_name,
+                    "end_quote":        pc_row["end_quote"],
+                    "quote_author":     pc_row["quote_author"],
+                }
+        except Exception:
+            pass
+
         return JSONResponse({
-            "week_id":     week_id,
-            "start":       mon.isoformat(),
-            "end":         today.isoformat(),
-            "summary":     summary,
-            "themes":      themes,
-            "growth_note": growth_note,
-            "stats":       stats,
-            "raw_count":   len([m for m in messages if m["role"] == "user"]),
-            "empty":       False,
+            "week_id":         week_id,
+            "start":           mon.isoformat(),
+            "end":             sun.isoformat(),
+            "today":           today.isoformat(),
+            "summary":         summary,
+            "themes":          themes,
+            "growth_note":     growth_note,
+            "stats":           stats,
+            "raw_count":       len([m for m in messages if m["role"] == "user"]),
+            "empty":           False,
+            "is_current_week": True,
+            "week_tarot":      week_tarot,
+            "end_quote":       week_end_quote,
+            "psych_context":   psych_context,
         })
     except Exception as e:
         print(f"[snapshot] error: {e}")
@@ -685,6 +785,30 @@ async def emotion_calendar(
         return JSONResponse({"records": [], "streak": 0, "error": str(e)})
 
 
+@app.get("/api/daily-record")
+async def get_daily_record_api(
+    date: Optional[str] = None,
+    user_id: str = Depends(get_current_user),
+):
+    """
+    取得（或懶生成）某天的完整日記錄：
+    情緒 + 塔羅牌 + AI 敘述
+    date: YYYY-MM-DD，預設今天
+    """
+    from datetime import date as _date
+    try:
+        target = _date.fromisoformat(date) if date else _date.today()
+    except ValueError:
+        return JSONResponse({"error": "invalid date format"}, status_code=400)
+
+    try:
+        from services.daily_narrative import get_or_generate_narrative
+        record = await get_or_generate_narrative(user_id, target)
+        return JSONResponse(record)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "found": False}, status_code=500)
+
+
 @app.post("/api/push-schedule")
 async def set_push_schedule_api(
     request: Request,
@@ -717,39 +841,54 @@ async def sync_weekly(
     user_id: str = Depends(get_current_user),
 ):
     """
-    增量拉取週報
-    優先從 Redis pop，fallback 從 PostgreSQL archives 讀
+    增量拉取週報（Cache-First / PostgreSQL SSOT）
+
+    流程：
+      1. PostgreSQL archives 為 Single Source of Truth，先查出所有週報 ID
+      2. 每份週報先嘗試 Redis cache（GET，不刪除）
+      3. Cache miss → 查 PostgreSQL → 回寫 Redis cache（SETEX 30天）
+      4. 永遠不 POP/DELETE Redis，快取過期自動失效
     """
-    reports = []
+    from services.db_persistent import get_weekly_reports
+    reports: list[dict] = []
 
-    # 嘗試 Redis（有設定才用）
+    # Step 1: PostgreSQL 為 SSOT，取出完整週報列表
     try:
-        from services.redis_client import (
-            list_pending_weekly, pop_weekly_report, set_last_sync
-        )
-        week_ids = await list_pending_weekly(user_id)
-        if since:
-            week_ids = [w for w in week_ids if w > since]
-        for week_id in week_ids:
-            report = await pop_weekly_report(user_id, week_id)
-            if report:
-                reports.append(report)
-                await set_last_sync(user_id, week_id)
-    except Exception:
-        pass  # Redis 未設定，走 PostgreSQL
+        db_reports = await get_weekly_reports(user_id, since=since or "")
+    except Exception as e:
+        print(f"[sync_weekly] PostgreSQL error: {e}")
+        return JSONResponse({"reports": [], "count": 0, "has_more": False})
 
-    # fallback / 補充：從 PostgreSQL archives 讀歷史週報
-    if not reports:
-        try:
-            from services.db_persistent import get_weekly_reports
-            db_reports = await get_weekly_reports(user_id, since=since or "")
-            # 排除和 Redis 已有的重複
-            existing_ids = {r["week_id"] for r in reports}
-            for r in db_reports:
-                if r["week_id"] not in existing_ids:
-                    reports.append(r)
-        except Exception as e:
-            print(f"[sync_weekly] DB fallback error: {e}")
+    if not db_reports:
+        return JSONResponse({"reports": [], "count": 0, "has_more": False})
+
+    # Step 2+3: 逐份週報，優先讀 Redis cache，miss 則查 PG 並回寫
+    try:
+        from services.redis_client import get_weekly_report_cache, set_weekly_report_cache
+        redis_ok = True
+    except Exception:
+        redis_ok = False
+
+    for db_report in db_reports:
+        wid = db_report["week_id"]
+        report = None
+
+        if redis_ok:
+            try:
+                report = await get_weekly_report_cache(user_id, wid)
+            except Exception:
+                pass
+
+        if report is None:
+            # Cache miss：使用 PostgreSQL 資料，並非同步回寫快取
+            report = db_report
+            if redis_ok:
+                try:
+                    await set_weekly_report_cache(user_id, wid, report)
+                except Exception:
+                    pass
+
+        reports.append(report)
 
     return JSONResponse({
         "reports":  reports,

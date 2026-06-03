@@ -607,8 +607,22 @@ async def check_milestone(user_id: str) -> Optional[str]:
                 # 先生成觀察文字，再儲存（首次儲存才算觸發）
                 keywords = await get_top_keywords(user_id, limit=5)
                 analysis = await generate_milestone_analysis(keywords, milestone)
+                # 里程碑塔羅（大阿爾克那成長牌池）
+                tarot_card = tarot_meaning = None
+                tarot_reversed = False
+                try:
+                    from services.symbolic import assign_milestone_tarot
+                    tarot = assign_milestone_tarot()
+                    tarot_card    = tarot["card_name"]
+                    tarot_meaning = tarot["meaning"]
+                    tarot_reversed = tarot["is_reversed"]
+                except Exception:
+                    pass
                 is_first = await check_and_mark_milestone(
-                    user_id, milestone, observation=analysis
+                    user_id, milestone, observation=analysis,
+                    tarot_card=tarot_card,
+                    tarot_meaning=tarot_meaning,
+                    tarot_reversed=tarot_reversed,
                 )
                 if is_first:
                     kws = keywords + ["…"] * 3

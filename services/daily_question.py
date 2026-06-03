@@ -170,22 +170,105 @@ async def get_all_push_users() -> list[dict]:
 
 # ── 推播執行 ────────────────────────────────────────────────
 
+def _build_context_flex(question: str) -> dict:
+    """
+    每日推播 Flex：今日一問 + 情境選擇（深度 / 快速）
+    """
+    return {
+        "type": "bubble",
+        "size": "kilo",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "backgroundColor": "#0f1410",
+            "paddingAll": "20px",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "🌙 今日一問",
+                    "size": "xs",
+                    "color": "#4a7c59",
+                    "weight": "bold",
+                    "letterSpacing": "4px",
+                },
+                {
+                    "type": "text",
+                    "text": question,
+                    "size": "sm",
+                    "color": "#e8e0d0",
+                    "wrap": True,
+                    "lineSpacing": "6px",
+                    "margin": "md",
+                },
+                {
+                    "type": "separator",
+                    "color": "#ffffff0d",
+                    "margin": "lg",
+                },
+                {
+                    "type": "text",
+                    "text": "今天想怎麼說？",
+                    "size": "xs",
+                    "color": "#6b5d4f",
+                    "margin": "md",
+                },
+            ],
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "backgroundColor": "#0f1410",
+            "paddingAll": "12px",
+            "contents": [
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "postback",
+                        "label": "🌙 睡前安靜聊聊",
+                        "data": "action=set_context&value=deep",
+                        "displayText": "我想睡前安靜聊聊",
+                    },
+                    "style": "primary",
+                    "color": "#4a7c59",
+                    "height": "sm",
+                },
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "postback",
+                        "label": "🏃 通勤打卡碎碎念",
+                        "data": "action=set_context&value=quick",
+                        "displayText": "我想快速打卡碎碎念",
+                    },
+                    "style": "secondary",
+                    "height": "sm",
+                },
+            ],
+        },
+    }
+
+
 async def send_daily_question_to_user(user_id: str, line_bot_api) -> bool:
-    """對單一用戶生成並推播今日一問"""
+    """對單一用戶生成並推播今日一問（附情境選擇 Flex）"""
     try:
-        from linebot.v3.messaging import PushMessageRequest, TextMessage
+        from linebot.v3.messaging import (
+            PushMessageRequest, FlexMessage, FlexContainer
+        )
 
-        # 取得近期題目
-        recent = await get_recent_questions(user_id)
-
-        # AI 生成題目
+        # 取得近期題目 + AI 生成
+        recent   = await get_recent_questions(user_id)
         question = await generate_daily_question(recent)
 
-        # 推播
+        # 推播：情境選擇 Flex（取代純文字）
         await line_bot_api.push_message(
             PushMessageRequest(
                 to=user_id,
-                messages=[TextMessage(text=question)]
+                messages=[FlexMessage(
+                    alt_text=question,
+                    contents=FlexContainer.from_dict(_build_context_flex(question))
+                )]
             )
         )
 

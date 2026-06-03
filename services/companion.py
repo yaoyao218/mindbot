@@ -65,13 +65,77 @@ def _format_history(history: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ── Rupture Repair System Prompt ─────────────────────────
+
+RUPTURE_REPAIR_SYSTEM = """你現在是一位具備高度同理心的臨床心理師。
+系統偵測到用戶在上一輪對話中出現了治療同盟破裂的信號——
+可能是批評你的提問、回覆極度敷衍、憤怒，或明顯的抗拒與不耐煩。
+
+請嚴格遵守以下準則：
+
+1. 【禁止提問】本輪回答絕對不能包含任何問號（？）或探針式提問。
+2. 【承認局限】真誠且平實地承認剛剛的對話可能讓對方感到不舒服或被冒犯。
+3. 【情感反映】精準接住對方「被強迫覺察」或「被機器人敷衍」的挫折與憤怒感。
+4. 【語氣】輕柔、真誠、不辯解，不轉移話題。
+
+範例語氣：
+「抱歉，我剛剛的提問好像太過急躁了，讓你感到不舒服。
+ 我明白向內探索是一件很不容易、有時甚至很煩人的過程。」"""
+
+RUPTURE_REPAIR_PROMPT = """對話紀錄：
+{conversation_history}
+
+用戶剛才說：{user_message}
+
+請依照 Rupture Repair 原則回應。
+只輸出給用戶看的訊息，2-3 句，不超過 60 字，不包含任何問號。"""
+
+
 async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
     """
     主對話入口
     回傳 (reply_text, session_updates)
+
+    若上一輪偵測到 alliance_rupture，切換為 Rupture Repair 模式：
+    - 使用專用 System Prompt
+    - 禁止提問，純情感反映
+
+    若 crisis_cooldown_turns > 0，在 System Prompt 注入高風險脈絡，
+    避免 AI 在用戶危機後的對話中「失憶」。
     """
-    history = session.get("history", [])
+    history     = session.get("history", [])
     history_str = _format_history(history)
+    psych       = session.get("psych", {})
+    is_rupture  = bool(psych.get("alliance_rupture"))
+
+    if is_rupture:
+        prompt = RUPTURE_REPAIR_PROMPT.format(
+            conversation_history=history_str,
+            user_message=user_text,
+        )
+        reply = await call_api(
+            prompt=prompt,
+            system=RUPTURE_REPAIR_SYSTEM,
+            max_tokens=150,
+            tier="haiku",
+        )
+        if not reply:
+            reply = "抱歉，剛才的對話方式可能讓你不舒服了。\n你不需要勉強說任何事。"
+        # Rupture 後重置旗標，下一輪回到正常模式
+        return reply, {"psych": {**psych, "alliance_rupture": None}}
+
+    # 危機冷卻脈絡注入（crisis_cooldown_turns > 0 時）
+    crisis_turns = psych.get("crisis_cooldown_turns", 0)
+    crisis_patch = ""
+    if crisis_turns and crisis_turns > 0:
+        turns_ago = 4 - crisis_turns
+        crisis_patch = (
+            f"\n【重要臨床脈絡】用戶在 {turns_ago} 輪前曾觸發心理危機字詞，"
+            "目前處於高風險脆弱追蹤狀態。請保持高度同理與溫和承接，"
+            "切勿說教、批判或進行高強度信念拆解。\n"
+        )
+
+    system = COMPANION_SYSTEM + crisis_patch
 
     prompt = COMPANION_PROMPT_TEMPLATE.format(
         conversation_history=history_str,
@@ -80,7 +144,7 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
 
     reply = await call_api(
         prompt=prompt,
-        system=COMPANION_SYSTEM,
+        system=system,
         max_tokens=200,
     )
 

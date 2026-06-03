@@ -97,6 +97,13 @@ async def generate_weekly_summary(
     )
 
 # ── 單一用戶週報產生 ──────────────────────────────────────
+_LOW_ENGAGEMENT_TAROT_POOL = [
+    ("WHEEL_OF_FORTUNE_REVERSED", "命運之輪・逆位", "靜待時機，內在正在蓄積力量"),
+    ("HIGH_PRIESTESS", "女祭司", "沉默中自有深邃的智慧"),
+    ("HERMIT", "隱者", "獨處是為了更清醒地回到自己"),
+    ("MOON", "月亮", "在模糊之中，感受也是真實的"),
+]
+
 async def build_weekly_report(
     user_id: str, start: date, end: date, week_id: str
 ) -> Optional[dict]:
@@ -104,7 +111,53 @@ async def build_weekly_report(
     psych_rows = await get_psych_in_range(user_id, start, end)
 
     if not messages:
-        return None
+        # 低度參與降級週報：不回傳 None，改回傳有溫度的空週結構
+        import random as _random
+        _tarot_key, _tarot_name, _tarot_meaning = _random.choice(_LOW_ENGAGEMENT_TAROT_POOL)
+        fallback_report = {
+            "week_id":     week_id,
+            "user_id":     user_id,
+            "start":       start.isoformat(),
+            "end":         end.isoformat(),
+            "summary":     "這週的你選擇把心事暫時闔上，給了自己一段安靜沉澱的空間。這也是很棒的自我調節方式。",
+            "themes":      [],
+            "growth_note": "在無言的留白中，內心正在靜靜蓄積重新出發的能量。",
+            "end_quote":   "有時候，什麼都不說，也是一種對自己的溫柔。",
+            "raw_count":   0,
+            "created_at":  datetime.utcnow().isoformat(),
+            "is_low_engagement": True,
+            "psych_context": {
+                "dialogue_insight": "在無言的留白中，內心正在靜靜蓄積重新出發的能量。",
+                "tarot_card":    _tarot_key,
+                "tarot_name_zh": _tarot_name,
+                "tarot_meaning": _tarot_meaning,
+                "end_quote":     "有時候，什麼都不說，也是一種對自己的溫柔。",
+                "quote_author":  "心事日記",
+            },
+            "stats": {
+                "total_turns": 0, "user_msg_count": 0,
+                "avg_arousal": None, "arousal_curve": [],
+                "emotion_counts": {}, "daily_counts": {},
+            },
+        }
+        try:
+            await save_archive(
+                user_id, week_id,
+                fallback_report["summary"],
+                stats={**fallback_report["stats"],
+                       "themes": [], "growth_note": fallback_report["growth_note"],
+                       "start": start.isoformat(), "end": end.isoformat(),
+                       "is_low_engagement": True},
+                raw_count=0,
+            )
+        except Exception as e:
+            print(f"[weekly] save_archive (low-engagement) failed for {user_id}: {e}")
+        try:
+            await put_weekly_report(user_id, week_id, fallback_report)
+        except Exception:
+            pass
+        print(f"[weekly] {user_id} {week_id}: no messages, low-engagement report saved")
+        return fallback_report
 
     # 統計（本地運算）
     stats = compute_stats(messages, psych_rows)
@@ -118,6 +171,12 @@ async def build_weekly_report(
         themes      = []
         growth_note = ""
 
+    # 取當週最後一筆收尾語錄
+    end_quote = next(
+        (r["end_quote"] for r in reversed(psych_rows) if r.get("end_quote")),
+        None
+    )
+
     report = {
         "week_id":     week_id,
         "user_id":     user_id,
@@ -126,6 +185,7 @@ async def build_weekly_report(
         "summary":     summary,
         "themes":      themes,
         "growth_note": growth_note,
+        "end_quote":   end_quote,
         "stats":       stats,
         "raw_count":   len(messages),
         "created_at":  datetime.utcnow().isoformat(),
@@ -133,10 +193,31 @@ async def build_weekly_report(
 
     # 存 PostgreSQL（永久）
     try:
+        # psych_context：取當週最後一筆有 dialogue_insight 或 quote_author 的記錄
+        _pc_quote_author     = None
+        _pc_dialogue_insight = None
+        _pc_tarot_card       = None
+        for row in reversed(psych_rows):
+            if row.get("end_quote") and not end_quote:
+                end_quote = row["end_quote"]
+            if row.get("quote_author") and not _pc_quote_author:
+                _pc_quote_author = row["quote_author"]
+            if row.get("dialogue_insight") and not _pc_dialogue_insight:
+                _pc_dialogue_insight = row["dialogue_insight"]
+            if row.get("tarot_card") and not _pc_tarot_card:
+                _pc_tarot_card = row["tarot_card"]
+            if all([end_quote, _pc_quote_author, _pc_dialogue_insight, _pc_tarot_card]):
+                break
+
         await save_archive(
             user_id, week_id, summary,
-            stats={**stats, "themes": themes, "growth_note": growth_note,
-                   "start": start.isoformat(), "end": end.isoformat()},
+            stats={**stats,
+                   "themes": themes, "growth_note": growth_note,
+                   "start": start.isoformat(), "end": end.isoformat(),
+                   "end_quote":        end_quote,
+                   "quote_author":     _pc_quote_author,
+                   "dialogue_insight": _pc_dialogue_insight,
+                   "tarot_card":       _pc_tarot_card},
             raw_count=len(messages),
         )
     except Exception as e:
