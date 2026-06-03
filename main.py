@@ -411,11 +411,24 @@ async def health_detail():
     except Exception as e:
         sig_ok = f"error: {e}"
 
+    # 測試 DB 連線
+    db_status = "❌ 未設定"
+    if os.environ.get("DATABASE_URL"):
+        try:
+            from services.db_persistent import get_pool
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            db_status = "✅ 連線成功"
+        except Exception as e:
+            db_status = f"❌ 連線失敗: {str(e)[:60]}"
+
     return JSONResponse({
         "server": "ok",
         "llm_provider": llm,
         "webhook_signature_test": sig_ok,
         "channel_secret_length": len(CHANNEL_SECRET),
+        "database": db_status,
         "env": {
             "LINE_CHANNEL_SECRET":       masked("LINE_CHANNEL_SECRET"),
             "LINE_CHANNEL_ACCESS_TOKEN": masked("LINE_CHANNEL_ACCESS_TOKEN"),
@@ -423,8 +436,8 @@ async def health_detail():
             "LINE_LOGIN_CHANNEL_SECRET": masked("LINE_LOGIN_CHANNEL_SECRET"),
             "GROQ_API_KEY":              masked("GROQ_API_KEY"),
             "ANTHROPIC_API_KEY":         masked("ANTHROPIC_API_KEY"),
+            "DATABASE_URL":              masked("DATABASE_URL"),
             "REDIS_URL":                 masked("REDIS_URL"),
-            "DB_HOST":                   masked("DB_HOST"),
         }
     })
 
