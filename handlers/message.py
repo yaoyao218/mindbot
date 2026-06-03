@@ -4,11 +4,27 @@ handlers/message.py — 心事日記主對話 handler（v2.0 規格）
 """
 
 import random
+import asyncio
 from linebot.v3.messaging import (
     MessagingApi, ReplyMessageRequest,
     TextMessage, FlexMessage, FlexContainer
 )
 from linebot.v3.webhooks import MessageEvent
+
+# ── 記憶體備援鎖（Redis 不可用時防 Race Condition）──────────
+_mem_locks: dict[str, bool] = {}
+_mem_lock_guard = asyncio.Lock()
+
+async def _acquire_mem_lock(user_id: str) -> bool:
+    async with _mem_lock_guard:
+        if _mem_locks.get(user_id):
+            return False
+        _mem_locks[user_id] = True
+        return True
+
+async def _release_mem_lock(user_id: str) -> None:
+    async with _mem_lock_guard:
+        _mem_locks.pop(user_id, None)
 
 from services.fast_path import fast_path_eval, FastPathResult
 from services.interceptor import process_response
@@ -119,28 +135,36 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     text = event.message.text.strip()
     reply_token = event.reply_token
 
-    # ── 分散式鎖：防止同一用戶連發訊息造成 Race Condition ──
-    _lock_acquired = False
+    # ── 雙層分散式鎖：Redis 優先，記憶體備援，100% 阻斷連發 ──
+    _redis_lock = False
+    _mem_lock   = False
+
     try:
-        from services.redis_client import acquire_user_lock, release_user_lock
-        _lock_acquired = await acquire_user_lock(user_id)
-        if not _lock_acquired:
+        from services.redis_client import acquire_user_lock
+        _redis_lock = await acquire_user_lock(user_id)
+        if not _redis_lock:
             await _reply(reply_token,
                 "你的上一則訊息還在處理中，請稍等一下 🌿", line_bot_api)
             return
     except Exception:
-        # Redis 未設定時略過鎖（允許繼續處理）
-        _lock_acquired = False
+        # Redis 不可用 → 降級為記憶體鎖
+        _mem_lock = await _acquire_mem_lock(user_id)
+        if not _mem_lock:
+            await _reply(reply_token,
+                "你的上一則訊息還在處理中，請稍等一下 🌿", line_bot_api)
+            return
 
     try:
         await _handle_message_inner(event, line_bot_api)
     finally:
-        if _lock_acquired:
+        if _redis_lock:
             try:
                 from services.redis_client import release_user_lock
                 await release_user_lock(user_id)
             except Exception:
                 pass
+        if _mem_lock:
+            await _release_mem_lock(user_id)
 
 
 async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi):
@@ -282,9 +306,20 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
         from services.clinical_diagnosis import diagnose as _diagnose
         dx = await _diagnose(text, session.get("history", []), total_turn)
         session.setdefault("psych", {})
-        session["psych"]["alliance_rupture"] = (
-            dx.alliance_rupture if dx.alliance_rupture != "NONE" else None
-        )
+
+        # 【修復核心】Rupture Repair 冷卻保護：
+        # 修復完成後設 rupture_repair_cooldown=2，冷卻期間禁止 diagnose() 重新觸發 rupture
+        # 防止「用戶道歉 → diagnose 仍判 rupture → 再次跳針道歉」的迴圈
+        cooldown = session["psych"].get("rupture_repair_cooldown", 0)
+        if cooldown > 0:
+            # 冷卻中：不覆寫 rupture 旗標，遞減計數器
+            session["psych"]["rupture_repair_cooldown"] = cooldown - 1
+            session["psych"]["alliance_rupture"] = None   # 強制保持重置狀態
+        else:
+            session["psych"]["alliance_rupture"] = (
+                dx.alliance_rupture if dx.alliance_rupture != "NONE" else None
+            )
+
         session["psych"]["defense_mechanism"] = (
             dx.defense_mechanism if dx.defense_mechanism != "NONE" else None
         )

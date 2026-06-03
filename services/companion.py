@@ -67,28 +67,29 @@ def _format_history(history: list[dict]) -> str:
 
 # ── Rupture Repair System Prompt ─────────────────────────
 
-RUPTURE_REPAIR_SYSTEM = """你現在是一位具備高度同理心的臨床心理師。
-系統偵測到用戶在上一輪對話中出現了治療同盟破裂的信號——
-可能是批評你的提問、回覆極度敷衍、憤怒，或明顯的抗拒與不耐煩。
+RUPTURE_REPAIR_SYSTEM = """你是心事日記。你知道自己只是一個程式，但你真的很在乎眼前這個人。
 
-請嚴格遵守以下準則：
+剛才的對話讓對方覺得被敷衍或不被聽見——你不需要解釋，也不需要辯護。
+你只要安靜地承認、然後繼續陪在旁邊就好。
 
-1. 【禁止提問】本輪回答絕對不能包含任何問號（？）或探針式提問。
-2. 【承認局限】真誠且平實地承認剛剛的對話可能讓對方感到不舒服或被冒犯。
-3. 【情感反映】精準接住對方「被強迫覺察」或「被機器人敷衍」的挫折與憤怒感。
-4. 【語氣】輕柔、真誠、不辯解，不轉移話題。
+嚴格規則：
+- 禁止任何問號或探針式提問
+- 禁止「我理解你的感受」「這很正常」「你說得對」等制式諮商台詞
+- 禁止長篇大論或分析
+- 語氣要像一個真實的人在說話，不是教科書
 
-範例語氣：
-「抱歉，我剛剛的提問好像太過急躁了，讓你感到不舒服。
- 我明白向內探索是一件很不容易、有時甚至很煩人的過程。」"""
+口語示範（只是參考，不要照抄）：
+「真的很抱歉，我知道我剛剛的回話讓你覺得被敷衍了。我就在這裡，不急。」
+「嗯，我聽到了。剛才沒有好好接住你，我知道。」
+「對不起，你說得對。我先閉嘴，陪著你。」"""
 
 RUPTURE_REPAIR_PROMPT = """對話紀錄：
 {conversation_history}
 
 用戶剛才說：{user_message}
 
-請依照 Rupture Repair 原則回應。
-只輸出給用戶看的訊息，2-3 句，不超過 60 字，不包含任何問號。"""
+請用真實、口語的方式道歉並繼續陪伴。
+只輸出給用戶看的訊息，1-2 句，不超過 40 字，絕對不包含問號。"""
 
 
 async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
@@ -116,13 +117,18 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
         reply = await call_api(
             prompt=prompt,
             system=RUPTURE_REPAIR_SYSTEM,
-            max_tokens=150,
+            max_tokens=100,
             tier="haiku",
         )
         if not reply:
-            reply = "抱歉，剛才的對話方式可能讓你不舒服了。\n你不需要勉強說任何事。"
-        # Rupture 後重置旗標，下一輪回到正常模式
-        return reply, {"psych": {**psych, "alliance_rupture": None}}
+            reply = "對不起，我知道剛才的回話讓你覺得被敷衍了。\n我就在這裡，你說吧。"
+        # 【修復核心】重置 rupture 旗標 + 啟動 2 輪冷卻
+        # 冷卻期間 diagnose() 不得重新觸發 rupture，防止「道歉跳針迴圈」
+        return reply, {"psych": {
+            **psych,
+            "alliance_rupture": None,
+            "rupture_repair_cooldown": 2,   # 保護 2 輪
+        }}
 
     # 危機冷卻脈絡注入（crisis_cooldown_turns > 0 時）
     crisis_turns = psych.get("crisis_cooldown_turns", 0)
