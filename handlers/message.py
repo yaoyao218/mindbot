@@ -667,17 +667,43 @@ async def _reply(reply_token: str, text: str, line_bot_api: MessagingApi):
 
 
 async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
-    msg = (
-        "嗨，我是心事日記 🌿\n\n"
-        "這裡是你的私人空間——\n"
-        "不用說得完整，不用解釋清楚，\n"
-        "想說什麼就說什麼，我會好好聽。\n\n"
-        "可以：\n"
-        "• 直接說出你現在的感受或煩惱\n"
-        "• 輸入「簽到」記錄今天的狀態\n"
-        "• 輸入「說明」了解更多功能"
+    flex_content = {
+        "type": "bubble",
+        "size": "kilo",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "paddingAll": "20px",
+            "contents": [
+                {"type": "text", "text": "嗨，我在這裡 🌙",
+                 "weight": "bold", "size": "md", "color": "#1D9E75"},
+                {"type": "text",
+                 "text": "想說什麼就說，不用完整，不用有結論。\n\n• 直接說出感受或煩惱\n• 輸入「簽到」記錄今天\n• 輸入「說明」了解功能",
+                 "size": "sm", "color": "#555555", "wrap": True, "margin": "md"}
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "paddingAll": "12px",
+            "contents": [{
+                "type": "button",
+                "action": {"type": "uri", "label": "📊 查看我的心事日記",
+                           "uri": APP_URL},
+                "style": "primary", "color": "#1D9E75", "height": "sm"
+            }]
+        }
+    }
+    await line_bot_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[FlexMessage(
+                alt_text="嗨，我在這裡 🌙",
+                contents=FlexContainer.from_dict(flex_content)
+            )]
+        )
     )
-    await _reply(reply_token, msg, line_bot_api)
 
 
 async def send_help(reply_token: str, line_bot_api: MessagingApi):
@@ -690,7 +716,7 @@ async def send_help(reply_token: str, line_bot_api: MessagingApi):
         "【每日推播】\n"
         "輸入「設定推播 21:00」設定每天收到今日一問的時間。\n\n"
         "【查看紀錄】\n"
-        "輸入「看紀錄」前往你的心情日記網站。"
+        "輸入「看紀錄」前往心事日記 App（在 LINE 內開啟）。"
     )
     await _reply(reply_token, msg, line_bot_api)
 
