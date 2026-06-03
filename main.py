@@ -338,6 +338,13 @@ async def get_current_user(request: Request) -> str:
 
 # ── LINE Login Callback ───────────────────────────────────
 
+@app.get("/api/auth/line_callback")
+async def line_callback_redirect():
+    """LINE Login OAuth GET redirect → 轉回 v2 SPA 由 LIFF SDK 接手"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/app-v2", status_code=302)
+
+
 @app.post("/api/auth/line_callback")
 async def line_callback(request: Request):
     """
