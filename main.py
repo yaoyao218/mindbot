@@ -542,6 +542,52 @@ async def get_conversations(
     return JSONResponse({"messages": messages, "count": len(messages)})
 
 
+@app.get("/api/milestones")
+async def get_milestones_api(user_id: str = Depends(get_current_user)):
+    """
+    取得用戶里程碑資料：
+    - 對話天數、連續天數
+    - 已觸發的里程碑（含 AI 觀察文字）
+    - 最近 14 天 emoji 序列（月曆觀察用）
+    """
+    from datetime import date as _date, timedelta
+    today = _date.today()
+
+    conv_days = 0
+    streak    = 0
+    achieved  = []
+    emoji_seq = []
+
+    try:
+        from services.db_persistent import (
+            count_conversation_days, get_streak_days,
+            get_user_milestones, get_emotion_calendar, get_pool
+        )
+        conv_days = await count_conversation_days(user_id)
+        streak    = await get_streak_days(user_id)
+        achieved  = await get_user_milestones(user_id)
+
+        # 最近 14 天 emoji
+        for delta in range(13, -1, -1):
+            d = today - timedelta(days=delta)
+            recs = await get_emotion_calendar(user_id, d.year, d.month)
+            day_str = d.isoformat()
+            found = next((r for r in recs if r["record_date"] == day_str), None)
+            emoji_seq.append({
+                "date":  day_str,
+                "emoji": found["emotion_emoji"] if found else None,
+            })
+    except Exception as e:
+        print(f"[milestones API] {e}")
+
+    return JSONResponse({
+        "conv_days": conv_days,
+        "streak":    streak,
+        "achieved":  achieved,
+        "emoji_14d": emoji_seq,
+    })
+
+
 @app.get("/api/emotion-calendar")
 async def emotion_calendar(
     year: Optional[int] = None,

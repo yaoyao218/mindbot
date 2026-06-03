@@ -1333,6 +1333,14 @@ canvas { display: block; width: 100% !important; }
           <div class="keyword-cloud" id="cal-keywords"></div>
         </div>
 
+        <!-- 7天 / 14天 AI 觀察 -->
+        <div class="card" id="cal-milestone-card" style="display:none">
+          <div class="emotion-dist-title" id="cal-milestone-title">近期觀察</div>
+          <div style="display:flex;gap:6px;margin:10px 0;flex-wrap:wrap" id="cal-milestone-emojis"></div>
+          <div style="font-size:13px;color:var(--text-soft);line-height:1.8;font-style:italic;margin-top:8px"
+               id="cal-milestone-obs"></div>
+        </div>
+
         <!-- 日期詳情 Popup -->
         <div class="cal-detail-popup" id="cal-detail-popup">
           <button class="cal-detail-close" onclick="closeCalDetail()">✕</button>
@@ -2084,8 +2092,46 @@ async function renderCalendar() {
     }
   }
 
-  // Keyword cloud — fetch from weekly stats stored locally
+  // Keyword cloud
   await renderCalKeywords();
+
+  // 里程碑 AI 觀察（7/14天）
+  await renderCalMilestone();
+}
+
+async function renderCalMilestone() {
+  const card   = document.getElementById('cal-milestone-card');
+  const title  = document.getElementById('cal-milestone-title');
+  const emojis = document.getElementById('cal-milestone-emojis');
+  const obs    = document.getElementById('cal-milestone-obs');
+  if (!card) return;
+
+  try {
+    const data = await apiFetch('/api/milestones');
+    const achieved = data.achieved || [];
+    const emoji14d = data.emoji_14d || [];
+
+    // 顯示最高達成的里程碑觀察
+    const best = achieved.sort((a,b) => b.days - a.days)[0];
+    if (!best) { card.style.display = 'none'; return; }
+
+    const days = best.days;
+    const obsText = best.observation || '';
+
+    // emoji 序列
+    const seqLen = days >= 14 ? 14 : 7;
+    const seq = emoji14d.slice(-seqLen);
+
+    title.textContent = `最近 ${seqLen} 天的你`;
+    emojis.innerHTML = seq.map(e =>
+      `<span style="font-size:20px" title="${e.date}">${e.emoji || '⬜'}</span>`
+    ).join('');
+    obs.textContent = obsText || '';
+
+    card.style.display = obsText ? '' : 'none';
+  } catch(e) {
+    if (card) card.style.display = 'none';
+  }
 }
 
 async function renderCalKeywords() {
@@ -2137,30 +2183,38 @@ async function renderMilestones() {
   const list = document.getElementById('milestone-list');
   if (!list) return;
 
-  // Get conversation day count from weekly stats
-  let totalDays = 0;
-  try {
-    const weeks = await IDB.getAll('weekly');
-    // Sum unique days from weekly stats
-    const daySet = new Set();
-    for (const w of weeks) {
-      const daily = w.stats?.daily_counts || {};
-      for (const d of Object.keys(daily)) daySet.add(d);
-    }
-    totalDays = daySet.size;
-  } catch {}
+  list.innerHTML = '<div style="color:var(--text-faint);font-size:13px;text-align:center;padding:24px">載入中…</div>';
 
-  // Try server for streak
-  let streak = 0;
+  let convDays = 0, streak = 0, achieved = [], emoji14d = [];
   try {
-    const data = await apiFetch(`/api/emotion-calendar?year=${new Date().getFullYear()}&month=${new Date().getMonth()+1}`);
-    streak = data.streak || 0;
-  } catch {}
+    const data = await apiFetch('/api/milestones');
+    convDays  = data.conv_days  || 0;
+    streak    = data.streak     || 0;
+    achieved  = data.achieved   || [];
+    emoji14d  = data.emoji_14d  || [];
+  } catch(e) {
+    console.warn('[milestones] fetch failed:', e);
+  }
+
+  // 已觸發里程碑的 days set
+  const achievedDays = new Set(achieved.map(a => a.days));
+  const achievedMap  = Object.fromEntries(achieved.map(a => [a.days, a]));
 
   list.innerHTML = MILESTONE_DEF.map(m => {
-    const unlocked = totalDays >= m.days;
-    const progress = Math.min(100, Math.round(totalDays / m.days * 100));
-    const left = m.days - totalDays;
+    const unlocked = achievedDays.has(m.days) || convDays >= m.days;
+    const progress = Math.min(100, Math.round(convDays / m.days * 100));
+    const left     = Math.max(0, m.days - convDays);
+    const obs      = achievedMap[m.days]?.observation || '';
+
+    // 7天里程碑：顯示 emoji 序列
+    let emojiRow = '';
+    if (m.days === 7 && unlocked && emoji14d.length >= 7) {
+      const last7 = emoji14d.slice(-7);
+      emojiRow = `
+        <div style="display:flex;gap:6px;margin:10px 0;flex-wrap:wrap">
+          ${last7.map(e => `<span style="font-size:20px">${e.emoji || '⬜'}</span>`).join('')}
+        </div>`;
+    }
 
     if (unlocked) {
       return `
@@ -2170,10 +2224,11 @@ async function renderMilestones() {
             ${m.title}
           </div>
           <div class="milestone-title">${m.subtitle}</div>
-          <div class="milestone-analysis">你已經到這裡了。</div>
+          ${emojiRow}
+          ${obs ? `<div class="milestone-analysis">${escHtml(obs)}</div>` : ''}
         </div>`;
     } else {
-      const lockedMsg = m.locked_msg.replace('{left}', Math.max(0, left));
+      const lockedMsg = m.locked_msg.replace('{left}', left);
       return `
         <div class="milestone-card locked">
           <div class="milestone-day-badge">
@@ -2186,7 +2241,7 @@ async function renderMilestones() {
               <div class="milestone-progress-fill" style="width:${progress}%"></div>
             </div>
             <div class="milestone-progress-label">
-              <span>${totalDays} 天</span>
+              <span>${convDays} 天</span>
               <span>${m.days} 天</span>
             </div>
           </div>

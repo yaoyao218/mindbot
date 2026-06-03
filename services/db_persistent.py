@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS milestone_log (
     id              BIGSERIAL    PRIMARY KEY,
     user_id         VARCHAR(64)  NOT NULL,
     milestone_days  SMALLINT     NOT NULL,
+    observation     TEXT         DEFAULT '',
     triggered_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
     UNIQUE (user_id, milestone_days)
 );
@@ -472,17 +473,42 @@ async def get_streak_days(user_id: str) -> int:
 
 # ── Milestone Log ─────────────────────────────────────────
 
-async def check_and_mark_milestone(user_id: str, days: int) -> bool:
+async def check_and_mark_milestone(
+    user_id: str, days: int, observation: str = ""
+) -> bool:
+    """首次觸發回傳 True，已觸發過回傳 False"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
-            INSERT INTO milestone_log (user_id, milestone_days)
-            VALUES ($1, $2) ON CONFLICT DO NOTHING
+            INSERT INTO milestone_log (user_id, milestone_days, observation)
+            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
             """,
-            user_id, days
+            user_id, days, observation
         )
         return result == "INSERT 0 1"
+
+
+async def get_user_milestones(user_id: str) -> list[dict]:
+    """取得用戶所有已觸發的里程碑（含觀察文字）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT milestone_days, observation, triggered_at
+            FROM milestone_log WHERE user_id = $1
+            ORDER BY milestone_days
+            """,
+            user_id
+        )
+        return [
+            {
+                "days":        r["milestone_days"],
+                "observation": r["observation"] or "",
+                "triggered_at": r["triggered_at"].isoformat() if r["triggered_at"] else "",
+            }
+            for r in rows
+        ]
 
 
 # ── Conversation Days Count ───────────────────────────────

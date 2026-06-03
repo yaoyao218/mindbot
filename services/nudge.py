@@ -604,10 +604,13 @@ async def check_milestone(user_id: str) -> Optional[str]:
 
         for milestone in MILESTONE_DAYS:
             if days >= milestone:
-                is_first = await check_and_mark_milestone(user_id, milestone)
+                # 先生成觀察文字，再儲存（首次儲存才算觸發）
+                keywords = await get_top_keywords(user_id, limit=5)
+                analysis = await generate_milestone_analysis(keywords, milestone)
+                is_first = await check_and_mark_milestone(
+                    user_id, milestone, observation=analysis
+                )
                 if is_first:
-                    keywords = await get_top_keywords(user_id, limit=5)
-                    analysis = await generate_milestone_analysis(keywords, milestone)
                     kws = keywords + ["…"] * 3
                     template = MILESTONE_TEMPLATES[milestone]
                     msg = template.format(
