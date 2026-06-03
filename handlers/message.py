@@ -116,7 +116,7 @@ except ImportError:
 
 CHECKIN_KEYWORDS  = ["簽到", "check in", "checkin", "今天狀態"]
 START_KEYWORDS    = ["開始", "start", "你好", "hi", "hello", "嗨", "哈囉"]
-HELP_KEYWORDS     = ["說明", "help", "怎麼用", "功能"]
+HELP_KEYWORDS     = ["說明", "help", "幫助", "幫忙", "指令", "怎麼用", "功能"]
 STOP_KEYWORDS     = ["停止", "結束對話", "不想說了", "先這樣"]
 WEBSITE_KEYWORDS  = ["看紀錄", "我的記錄", "心情記錄", "情緒記錄", "查看日記",
                      "歷史紀錄", "心情日記", "報告", "週報", "統計"]
@@ -742,18 +742,101 @@ async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
 
 
 async def send_help(reply_token: str, line_bot_api: MessagingApi):
-    msg = (
-        "📖 使用說明\n\n"
-        "【開始對話】\n"
-        "直接說你在煩惱的事，我會陪你說。\n\n"
-        "【每日簽到】\n"
-        "輸入「簽到」記錄今天的心情。\n\n"
-        "【每日推播】\n"
-        "輸入「設定推播 21:00」設定每天收到今日一問的時間。\n\n"
-        "【查看紀錄】\n"
-        "輸入「看紀錄」前往心事日記 App（在 LINE 內開啟）。"
+    """互動式功能全景圖 — 4 張卡片 Flex Carousel"""
+    _GREEN  = "#1D9E75"
+    _BG     = "#0f1410"
+    _GRAY   = "#6b7280"
+    _LIGHT  = "#e2e8f0"
+    _DIM    = "#94a3b8"
+
+    def _card(emoji, title, body_text, btn_label, action):
+        return {
+            "type": "bubble",
+            "size": "kilo",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "paddingAll": "20px",
+                "spacing": "md",
+                "backgroundColor": _BG,
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": f"{emoji} {title}",
+                        "weight": "bold",
+                        "size": "sm",
+                        "color": _GREEN,
+                        "wrap": True,
+                    },
+                    {
+                        "type": "text",
+                        "text": body_text,
+                        "size": "xs",
+                        "color": _DIM,
+                        "wrap": True,
+                        "lineSpacing": "5px",
+                        "margin": "sm",
+                    },
+                ],
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "paddingAll": "12px",
+                "backgroundColor": _BG,
+                "contents": [
+                    {
+                        "type": "button",
+                        "action": action,
+                        "style": "primary",
+                        "color": _GREEN,
+                        "height": "sm",
+                    }
+                ],
+            },
+        }
+
+    cards = [
+        _card(
+            "🛌", "啟動深度對話",
+            "最近心裡很亂？傳送「睡前安靜聊聊」，我會放慢步調，啟動長對話陪伴，引導你梳理內心的小劇場，並在收尾時為你抽出心靈投射卡片。",
+            "開啟深度對話",
+            {"type": "message", "label": "開啟深度對話", "text": "🛌 睡前安靜聊聊"},
+        ),
+        _card(
+            "🏃", "快速心情宣洩",
+            "時間緊迫、只想趕快吐槽？傳送「通勤打卡碎碎念」，我會開啟 3 輪內精準收尾模式，幫你快速打包情緒，絕不拖泥帶水。",
+            "快速宣洩",
+            {"type": "message", "label": "快速宣洩", "text": "🏃 通勤打卡碎碎念"},
+        ),
+        _card(
+            "📚", "情緒詞典與解鎖成就",
+            "想看看你最近解鎖了哪些稀有心理學概念？（如反芻思考、認知解融…）點擊下方按鈕，去月曆上尋找專屬你的金色 ✦ 星號。",
+            "查看我的月曆",
+            {"type": "uri", "label": "查看我的月曆", "uri": f"{APP_URL}#calendar"},
+        ),
+        _card(
+            "🔒", "數據自主管理",
+            "想隨時打包下載全部心事 JSON 檔案，或立刻物理清空這台手機裡的所有歷史字泡？請至設定頁面啟動隱私防線。",
+            "前往設定頁面",
+            {"type": "uri", "label": "前往設定頁面", "uri": f"{APP_URL}#settings"},
+        ),
+    ]
+
+    await line_bot_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[
+                FlexMessage(
+                    alt_text="心事日記 · 功能全景圖",
+                    contents=FlexContainer.from_dict({
+                        "type": "carousel",
+                        "contents": cards,
+                    }),
+                )
+            ],
+        )
     )
-    await _reply(reply_token, msg, line_bot_api)
 
 
 async def send_checkin_flex(reply_token: str, line_bot_api: MessagingApi):

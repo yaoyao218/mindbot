@@ -216,7 +216,27 @@ export function renderFallbackUI(container, weeklyData) {
         <p class="italic text-slate-400 text-sm leading-relaxed">「${_esc(quote)}」</p>
         <p class="text-right text-xs text-amber-400 font-medium mt-2">——&nbsp;${_esc(author)}</p>
       </div>
+
+      <!-- 新手 CTA：引導去 LINE 開啟第一次對話 -->
+      <button id="go-line-cta"
+              class="mt-6 w-full py-3.5 rounded-2xl text-sm font-semibold
+                     bg-gradient-to-r from-indigo-950/80 to-violet-950/60
+                     border border-indigo-500/30 text-indigo-200
+                     active:scale-95 transition-all">
+        🪐 去 LINE 官方帳號開啟第一次對話
+      </button>
     </div>`;
+
+  // 按鈕：LINE 內關窗回聊天室，瀏覽器則開新頁
+  requestAnimationFrame(() => {
+    document.getElementById('go-line-cta')?.addEventListener('click', () => {
+      if (window.liff?.isInClient()) {
+        window.liff.closeWindow();
+      } else {
+        window.open('https://line.me/R/ti/p/@mindbot', '_blank');
+      }
+    });
+  });
 }
 
 /* ── 洞察名言卡 ──────────────────────────────────────── */

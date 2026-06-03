@@ -9,6 +9,7 @@ import { renderTarotBlind, initTarotCard }     from './components/TarotBlind.js'
 import { renderCalendar }                      from './components/CalendarView.js';
 import { renderTimeline, toggleLocalBackup }   from './components/Timeline.js';
 import { renderSettings, exportUserData }      from './components/Settings.js';
+import { renderWelcomeModal }                  from './components/WelcomeModal.js';
 
 class AppController {
   constructor() {
@@ -84,7 +85,21 @@ class AppController {
 
       this.navigate(window.location.hash || '#dashboard');
       this.syncBackground().catch(e => console.warn('[Sync]', e));
+
+      // 首次登入引導（非阻塞，不影響 navigate）
+      this._checkFirstTimeUser().catch(() => {});
     } catch (_) { /* DOM 也爛了就放棄 */ }
+  }
+
+  /** 首次登入：檢查 has_boarded，尚未完成則彈出引導彈窗 */
+  async _checkFirstTimeUser() {
+    const hasBoarded = await getSetting('has_boarded', false);
+    if (!hasBoarded) {
+      renderWelcomeModal(document.body, () => {
+        // 關閉後重新渲染當前頁（讓 Dashboard 刷新 CTA 狀態）
+        this.navigate(window.location.hash || '#dashboard');
+      });
+    }
   }
 
   /* ── LIFF 初始化 ─────────────────────────────── */
@@ -291,23 +306,45 @@ class AppController {
   }
 
   _openCreateModal(dateStr) {
+    const isToday = dateStr === new Date().toISOString().slice(0, 10);
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="modal-sheet">
         <div class="flex justify-between items-center mb-4">
-          <h3 class="text-glow-text font-semibold">${dateStr} · 新增紀錄</h3>
-          <button class="close-modal text-slate-500 text-xl">×</button>
+          <h3 class="text-glow-text font-semibold">${dateStr}</h3>
+          <button class="close-modal text-slate-500 text-xl leading-none">×</button>
         </div>
-        <p class="text-slate-400 text-sm leading-relaxed">
-          這天還沒有對話紀錄。<br>
-          回到 LINE 跟心事日記說說話，這裡就會出現當天的情緒紀錄 🌿
+        <p class="text-slate-300 text-sm leading-relaxed mb-2">
+          今天還沒有留下心事蹤跡。
         </p>
-        <button class="close-modal mt-5 w-full py-2.5 rounded-xl bg-glow-card border border-white/8
-                       text-slate-400 text-sm active:scale-98 transition">
-          好的
+        <p class="text-slate-400 text-sm leading-relaxed mb-5">
+          ${isToday
+            ? '今晚睡前，試著到聊天室對我說：<br><span class="text-amber-300 font-medium">「🛌 睡前安靜聊聊」</span><br>來點亮今天的金色 ✦ 星號吧！'
+            : '回到 LINE 聊天室，跟心事日記說說最近的心情，這裡就會出現你的情緒足跡 🌿'}
+        </p>
+        <button id="cta-go-line"
+                class="w-full py-3 rounded-xl text-sm font-medium
+                       bg-indigo-950/60 border border-indigo-500/30
+                       text-indigo-300 active:scale-95 transition mb-3">
+          🪐 前往 LINE 開啟對話
+        </button>
+        <button class="close-modal w-full py-2 rounded-xl bg-glow-card border border-white/8
+                       text-slate-500 text-sm active:scale-98 transition">
+          稍後再說
         </button>
       </div>`;
+
+    const goLine = overlay.querySelector('#cta-go-line');
+    goLine?.addEventListener('click', () => {
+      overlay.remove();
+      if (window.liff?.isInClient()) {
+        window.liff.closeWindow();
+      } else {
+        window.open('https://line.me/R/ti/p/@mindbot', '_blank');
+      }
+    });
+
     overlay.querySelectorAll('.close-modal').forEach(b => b.onclick = () => overlay.remove());
     document.body.appendChild(overlay);
   }
