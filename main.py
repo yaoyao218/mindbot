@@ -504,31 +504,31 @@ async def get_conversations(
     """
     messages = []
 
-    # 嘗試 DB
+    # 嘗試 DB（asyncpg / PostgreSQL）
     try:
-        from datetime import date
         from services.db_persistent import get_pool
         pool = await get_pool()
         async with pool.acquire() as conn:
-            import aiomysql
-            async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute(
-                    """
-                    SELECT role, content, created_at
-                    FROM session_messages
-                    WHERE user_id = %s
-                    ORDER BY created_at DESC
-                    LIMIT %s
-                    """,
-                    (user_id, limit)
-                )
-                rows = await cur.fetchall()
-                for r in rows:
-                    if hasattr(r.get("created_at"), "isoformat"):
-                        r["created_at"] = r["created_at"].isoformat()
-                messages = list(reversed(rows))
-    except Exception:
-        pass
+            rows = await conn.fetch(
+                """
+                SELECT role, content, created_at
+                FROM session_messages
+                WHERE user_id = $1
+                ORDER BY created_at DESC
+                LIMIT $2
+                """,
+                user_id, limit
+            )
+            messages = list(reversed([
+                {
+                    "role":       r["role"],
+                    "content":    r["content"],
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else "",
+                }
+                for r in rows
+            ]))
+    except Exception as e:
+        print(f"[conversations] DB error: {e}")
 
     # Fallback: in-process buffer
     if not messages:
@@ -583,11 +583,10 @@ async def set_push_schedule_api(
         if not enabled:
             pool = await get_pool()
             async with pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        "UPDATE push_schedule SET enabled = 0 WHERE user_id = %s",
-                        (user_id,)
-                    )
+                await conn.execute(
+                    "UPDATE push_schedule SET enabled = 0 WHERE user_id = $1",
+                    user_id
+                )
         return JSONResponse({"ok": True, "hour": hour, "minute": minute, "enabled": enabled})
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)

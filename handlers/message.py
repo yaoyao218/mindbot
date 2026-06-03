@@ -160,10 +160,9 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
             from services.db_persistent import get_pool
             pool = await get_pool()
             async with pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        "UPDATE push_schedule SET enabled=0 WHERE user_id=%s",
-                        (user_id,))
+                await conn.execute(
+                    "UPDATE push_schedule SET enabled=0 WHERE user_id=$1",
+                    user_id)
         except Exception:
             pass
         await _reply(reply_token,
