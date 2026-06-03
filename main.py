@@ -13,7 +13,7 @@ from linebot.v3.messaging import (
     ReplyMessageRequest, TextMessage
 )
 from linebot.v3.webhooks import (
-    MessageEvent, TextMessageContent, PostbackEvent
+    MessageEvent, TextMessageContent, PostbackEvent, FollowEvent
 )
 from handlers.message import handle_message
 from handlers.postback import handle_postback
@@ -106,6 +106,9 @@ async def process_line_events(events: list) -> None:
                     await handle_message(event, line_bot_api)
                 elif isinstance(event, PostbackEvent):
                     await handle_postback(event, line_bot_api)
+                elif isinstance(event, FollowEvent):
+                    from handlers.onboarding import send_welcome
+                    await send_welcome(event.source.user_id, line_bot_api)
             except Exception as e:
                 print(f"[Webhook] Event processing error: {e}")
 
@@ -129,6 +132,30 @@ async def serve_app():
 async def oauth_callback():
     """LINE Login OAuth redirect → 回到 SPA 由前端處理 code"""
     return FileResponse("static/prototype.html")
+
+
+@app.get("/calendar")
+async def serve_calendar():
+    """情緒月曆入口（從 LINE 連結過來）→ 帶 hash 導向 SPA"""
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(
+        '<html><head>'
+        '<meta http-equiv="refresh" content="0; url=/app#calendar">'
+        '<script>location.replace("/app#calendar")</script>'
+        '</head></html>'
+    )
+
+
+@app.get("/report")
+async def serve_report():
+    """週報入口（從 LINE 連結過來）→ 帶 hash 導向 SPA"""
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(
+        '<html><head>'
+        '<meta http-equiv="refresh" content="0; url=/app#weeks">'
+        '<script>location.replace("/app#weeks")</script>'
+        '</head></html>'
+    )
 
 
 # ── 前端設定（注入環境變數給 SPA）────────────────────────

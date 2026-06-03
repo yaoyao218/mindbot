@@ -650,6 +650,271 @@ canvas { display: block; width: 100% !important; }
 @media (max-width: 400px) {
   .grid-3 { grid-template-columns: 1fr; }
 }
+
+/* ═══════════════════════════════════════════════
+   CALENDAR PAGE
+═══════════════════════════════════════════════ */
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.cal-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.cal-nav-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  color: var(--text-soft);
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--transition);
+}
+.cal-nav-btn:hover { background: var(--bg-4); color: var(--text); }
+.cal-month-label {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  color: var(--gold-lt);
+  letter-spacing: .1em;
+  min-width: 120px;
+  text-align: center;
+}
+.cal-streak-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: var(--gold-lt);
+}
+
+.calendar-grid-wrap { overflow-x: auto; }
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  min-width: 280px;
+}
+.cal-day-header {
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: .08em;
+  padding: 4px 0;
+}
+.cal-day {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: var(--bg-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition);
+  border: 1px solid transparent;
+  position: relative;
+}
+.cal-day:hover { background: var(--bg-4); transform: scale(1.05); }
+.cal-day.today { border-color: var(--gold-dim); }
+.cal-day.empty { background: transparent; cursor: default; pointer-events: none; }
+.cal-day.has-record { background: var(--bg-4); }
+.cal-day-num {
+  font-size: 9px;
+  color: var(--text-faint);
+  line-height: 1;
+}
+.cal-day-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+.cal-day-dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+/* Day Detail Popup */
+.cal-detail-popup {
+  position: fixed;
+  bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r);
+  padding: 16px 20px;
+  min-width: 240px; max-width: 320px;
+  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  animation: slideUp .2s ease both;
+  display: none;
+}
+.cal-detail-popup.show { display: block; }
+@keyframes slideUp {
+  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+.cal-detail-date { font-size: 11px; color: var(--text-faint); margin-bottom: 6px; }
+.cal-detail-emoji { font-size: 32px; margin-bottom: 8px; display: block; }
+.cal-detail-label { font-size: 13px; color: var(--text-soft); }
+.cal-detail-close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; color: var(--text-faint);
+  cursor: pointer; font-size: 14px;
+}
+
+/* Emotion Distribution Bars */
+.emotion-dist-section { margin-top: 24px; }
+.emotion-dist-title {
+  font-size: 11px;
+  letter-spacing: .12em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.emotion-dist-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.emotion-dist-emoji { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+.emotion-dist-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.emotion-dist-bar-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 3px;
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+.emotion-dist-count { font-size: 11px; color: var(--text-faint); width: 24px; text-align: right; flex-shrink: 0; }
+
+/* Keyword Cloud */
+.keyword-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.kw-tag {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-soft);
+  letter-spacing: .04em;
+}
+.kw-tag.kw-lg { font-size: 15px; background: var(--bg-4); color: var(--text); }
+.kw-tag.kw-md { font-size: 13px; }
+
+/* ═══════════════════════════════════════════════
+   MILESTONES PAGE
+═══════════════════════════════════════════════ */
+.milestone-list { display: flex; flex-direction: column; gap: 16px; }
+.milestone-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.milestone-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--green), var(--gold));
+}
+.milestone-card.locked {
+  opacity: .45;
+  filter: grayscale(.5);
+}
+.milestone-card.locked::before { background: var(--border); }
+.milestone-day-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-3);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 12px;
+  color: var(--gold-lt);
+  margin-bottom: 12px;
+}
+.milestone-emoji { font-size: 22px; }
+.milestone-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.milestone-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+.milestone-kw {
+  font-size: 12px;
+  color: var(--gold-lt);
+  background: rgba(201,168,76,.1);
+  border: 1px solid var(--gold-dim);
+  border-radius: 12px;
+  padding: 3px 10px;
+}
+.milestone-analysis {
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.8;
+  font-style: italic;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.milestone-locked-msg {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 8px;
+}
+.milestone-progress-wrap {
+  margin-top: 12px;
+}
+.milestone-progress-bar {
+  height: 4px;
+  background: var(--bg-3);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.milestone-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), var(--gold));
+  border-radius: 2px;
+  transition: width .8s cubic-bezier(.4,0,.2,1);
+}
+.milestone-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
 </style>
 </head>
 <body>
@@ -694,6 +959,14 @@ canvas { display: block; width: 100% !important; }
         </button>
         <button class="nav-item" onclick="goPage('trends')">
           <span class="nav-icon">〰</span> 情緒趨勢
+        </button>
+
+        <div class="nav-section-label">帳號</div>
+        <button class="nav-item" onclick="goPage('calendar')">
+          <span class="nav-icon">📅</span> 情緒月曆
+        </button>
+        <button class="nav-item" onclick="goPage('milestones')">
+          <span class="nav-icon">🏆</span> 里程碑
         </button>
 
         <div class="nav-section-label">帳號</div>
@@ -956,6 +1229,74 @@ canvas { display: block; width: 100% !important; }
           <div style="padding-top:8px;text-align:right">
             <button class="settings-action" onclick="logout()">登出</button>
           </div>
+        </div>
+      </div>
+
+
+      <!-- ══ PAGE: CALENDAR ══════════════════════════════ -->
+      <div class="page" id="page-calendar">
+        <div class="page-header">
+          <h1 class="page-title">情緒月曆</h1>
+          <p class="page-sub">每日情緒記錄與分佈</p>
+        </div>
+
+        <div class="card">
+          <div class="calendar-header">
+            <div class="cal-month-nav">
+              <button class="cal-nav-btn" onclick="calPrevMonth()">‹</button>
+              <span class="cal-month-label" id="cal-month-label">—</span>
+              <button class="cal-nav-btn" onclick="calNextMonth()">›</button>
+            </div>
+            <div class="cal-streak-chip">
+              🔥 <span id="cal-streak">0</span> 天連續
+            </div>
+          </div>
+
+          <div class="calendar-grid-wrap">
+            <div class="calendar-grid" id="cal-day-headers">
+              <div class="cal-day-header">日</div>
+              <div class="cal-day-header">一</div>
+              <div class="cal-day-header">二</div>
+              <div class="cal-day-header">三</div>
+              <div class="cal-day-header">四</div>
+              <div class="cal-day-header">五</div>
+              <div class="cal-day-header">六</div>
+            </div>
+            <div class="calendar-grid" id="cal-grid"></div>
+          </div>
+        </div>
+
+        <!-- 情緒分佈 -->
+        <div class="card" id="cal-dist-card" style="display:none">
+          <div class="emotion-dist-section">
+            <div class="emotion-dist-title">本月情緒分佈</div>
+            <div id="cal-dist-bars"></div>
+          </div>
+        </div>
+
+        <!-- 關鍵詞雲 -->
+        <div class="card" id="cal-kw-card" style="display:none">
+          <div class="emotion-dist-title">本月常見主題</div>
+          <div class="keyword-cloud" id="cal-keywords"></div>
+        </div>
+
+        <!-- 日期詳情 Popup -->
+        <div class="cal-detail-popup" id="cal-detail-popup">
+          <button class="cal-detail-close" onclick="closeCalDetail()">✕</button>
+          <div class="cal-detail-date" id="cal-detail-date"></div>
+          <span class="cal-detail-emoji" id="cal-detail-emoji">😐</span>
+          <div class="cal-detail-label" id="cal-detail-label"></div>
+        </div>
+      </div>
+
+      <!-- ══ PAGE: MILESTONES ═══════════════════════════ -->
+      <div class="page" id="page-milestones">
+        <div class="page-header">
+          <h1 class="page-title">里程碑</h1>
+          <p class="page-sub">你一直都在</p>
+        </div>
+        <div class="milestone-list" id="milestone-list">
+          <div style="color:var(--text-faint);font-size:13px;padding:24px 0;text-align:center">載入中…</div>
         </div>
       </div>
 
@@ -1241,7 +1582,10 @@ function goPage(page) {
 }
 
 function pageLabel(p) {
-  return { snapshot:'本週快照', weeks:'週報列表', trends:'情緒趨勢', settings:'資料管理' }[p] || '';
+  return {
+    snapshot:'本週快照', weeks:'週報列表', trends:'情緒趨勢',
+    settings:'資料管理', calendar:'情緒月曆', milestones:'里程碑'
+  }[p] || '';
 }
 
 async function openDetail(weekId) {
@@ -1255,11 +1599,13 @@ async function openDetail(weekId) {
 }
 
 async function refreshCurrentPage() {
-  if (currentPage === 'snapshot') await renderSnapshot();
-  if (currentPage === 'weeks')    await renderWeekList();
-  if (currentPage === 'trends')   await renderTrends();
+  if (currentPage === 'snapshot')   await renderSnapshot();
+  if (currentPage === 'weeks')      await renderWeekList();
+  if (currentPage === 'trends')     await renderTrends();
   if (currentPage === 'detail' && currentWeekId) await renderDetail(currentWeekId);
-  if (currentPage === 'settings') renderSettings();
+  if (currentPage === 'settings')   renderSettings();
+  if (currentPage === 'calendar')   await renderCalendar();
+  if (currentPage === 'milestones') await renderMilestones();
 }
 
 /* ═══════════════════════════════════════════════
@@ -1579,6 +1925,222 @@ async function deleteAllData() {
 }
 
 /* ═══════════════════════════════════════════════
+   CALENDAR PAGE
+═══════════════════════════════════════════════ */
+let calYear  = new Date().getFullYear();
+let calMonth = new Date().getMonth() + 1; // 1-based
+
+const EMOJI_LABEL = {
+  '😔': '悲傷／沉重',   '😟': '焦慮／擔憂',
+  '😤': '憤怒／煩躁',   '😐': '平淡／無感',
+  '😌': '平靜／還好',   '🙂': '輕鬆／小確幸',
+  '😊': '愉快／滿足',
+};
+
+function calPrevMonth() {
+  calMonth--;
+  if (calMonth < 1) { calMonth = 12; calYear--; }
+  renderCalendar();
+}
+function calNextMonth() {
+  const now = new Date();
+  if (calYear === now.getFullYear() && calMonth >= now.getMonth() + 1) return;
+  calMonth++;
+  if (calMonth > 12) { calMonth = 1; calYear++; }
+  renderCalendar();
+}
+
+async function renderCalendar() {
+  const label = document.getElementById('cal-month-label');
+  if (label) label.textContent = `${calYear} 年 ${calMonth} 月`;
+
+  let records = [], streak = 0;
+  try {
+    const data = await apiFetch(`/api/emotion-calendar?year=${calYear}&month=${calMonth}`);
+    records = data.records || [];
+    streak  = data.streak  || 0;
+  } catch (e) { /* offline */ }
+
+  const streakEl = document.getElementById('cal-streak');
+  if (streakEl) streakEl.textContent = streak;
+
+  // Build date→record map
+  const byDate = {};
+  for (const r of records) byDate[r.record_date] = r;
+
+  // Render grid
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+
+  const firstDay = new Date(calYear, calMonth - 1, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  let html = '';
+  // Empty cells before first day
+  for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const rec = byDate[dateStr];
+    const isToday = dateStr === todayStr;
+    const cls = ['cal-day', rec ? 'has-record' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+    html += `<div class="${cls}" onclick="openCalDay('${dateStr}','${rec ? rec.emotion_emoji : ''}','${rec ? (EMOJI_LABEL[rec.emotion_emoji]||'') : ''}')">
+      <span class="cal-day-num">${d}</span>
+      ${rec ? `<span class="cal-day-emoji">${rec.emotion_emoji}</span>` : '<span class="cal-day-dot"></span>'}
+    </div>`;
+  }
+  grid.innerHTML = html;
+
+  // Emotion distribution
+  const dist = {};
+  for (const r of records) {
+    const e = r.emotion_emoji || '😐';
+    dist[e] = (dist[e] || 0) + 1;
+  }
+  const distEntries = Object.entries(dist).sort((a,b) => b[1]-a[1]);
+  const distCard = document.getElementById('cal-dist-card');
+  const distBars = document.getElementById('cal-dist-bars');
+  if (distCard && distBars) {
+    if (distEntries.length) {
+      const max = distEntries[0][1];
+      distBars.innerHTML = distEntries.map(([emoji, count]) => `
+        <div class="emotion-dist-row">
+          <span class="emotion-dist-emoji">${emoji}</span>
+          <div class="emotion-dist-bar-track">
+            <div class="emotion-dist-bar-fill" style="width:${Math.round(count/max*100)}%"></div>
+          </div>
+          <span class="emotion-dist-count">${count}</span>
+        </div>`).join('');
+      distCard.style.display = '';
+    } else {
+      distCard.style.display = 'none';
+    }
+  }
+
+  // Keyword cloud — fetch from weekly stats stored locally
+  await renderCalKeywords();
+}
+
+async function renderCalKeywords() {
+  const kwCard = document.getElementById('cal-kw-card');
+  const kwCloud = document.getElementById('cal-keywords');
+  if (!kwCard || !kwCloud) return;
+  try {
+    // Pull keywords from local IDB weekly reports for this month
+    const weeks = await IDB.getAll('weekly');
+    const monthStr = `${calYear}-${String(calMonth).padStart(2,'0')}`;
+    const relevant = weeks.filter(w => w.week_id && w.week_id.startsWith(String(calYear)));
+    const allThemes = relevant.flatMap(w => w.themes || []);
+    if (!allThemes.length) { kwCard.style.display = 'none'; return; }
+    const counts = {};
+    for (const t of allThemes) counts[t] = (counts[t]||0) + 1;
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0, 12);
+    const max = sorted[0][1];
+    kwCloud.innerHTML = sorted.map(([kw, cnt]) => {
+      const size = cnt/max > .6 ? 'kw-lg' : cnt/max > .3 ? 'kw-md' : '';
+      return `<span class="kw-tag ${size}">${kw}</span>`;
+    }).join('');
+    kwCard.style.display = '';
+  } catch { kwCard.style.display = 'none'; }
+}
+
+function openCalDay(date, emoji, label) {
+  const popup = document.getElementById('cal-detail-popup');
+  if (!popup) return;
+  document.getElementById('cal-detail-date').textContent  = date;
+  document.getElementById('cal-detail-emoji').textContent = emoji || '😐';
+  document.getElementById('cal-detail-label').textContent = label || '無記錄';
+  popup.classList.add('show');
+}
+function closeCalDetail() {
+  const popup = document.getElementById('cal-detail-popup');
+  if (popup) popup.classList.remove('show');
+}
+
+/* ═══════════════════════════════════════════════
+   MILESTONES PAGE
+═══════════════════════════════════════════════ */
+const MILESTONE_DEF = [
+  { days: 7,  emoji: '🌱', title: '第 7 天', subtitle: '這週你每天都來了', locked_msg: '再聊幾天就到了' },
+  { days: 14, emoji: '🌿', title: '第 14 天', subtitle: '兩週，說話的方式有點不一樣了', locked_msg: `還差 {left} 天解鎖` },
+  { days: 30, emoji: '🌙', title: '第 30 天', subtitle: '一個月，你沒有停下來', locked_msg: `還差 {left} 天解鎖` },
+];
+
+async function renderMilestones() {
+  const list = document.getElementById('milestone-list');
+  if (!list) return;
+
+  // Get conversation day count from weekly stats
+  let totalDays = 0;
+  try {
+    const weeks = await IDB.getAll('weekly');
+    // Sum unique days from weekly stats
+    const daySet = new Set();
+    for (const w of weeks) {
+      const daily = w.stats?.daily_counts || {};
+      for (const d of Object.keys(daily)) daySet.add(d);
+    }
+    totalDays = daySet.size;
+  } catch {}
+
+  // Try server for streak
+  let streak = 0;
+  try {
+    const data = await apiFetch(`/api/emotion-calendar?year=${new Date().getFullYear()}&month=${new Date().getMonth()+1}`);
+    streak = data.streak || 0;
+  } catch {}
+
+  list.innerHTML = MILESTONE_DEF.map(m => {
+    const unlocked = totalDays >= m.days;
+    const progress = Math.min(100, Math.round(totalDays / m.days * 100));
+    const left = m.days - totalDays;
+
+    if (unlocked) {
+      return `
+        <div class="milestone-card">
+          <div class="milestone-day-badge">
+            <span class="milestone-emoji">${m.emoji}</span>
+            ${m.title}
+          </div>
+          <div class="milestone-title">${m.subtitle}</div>
+          <div class="milestone-analysis">你已經到這裡了。</div>
+        </div>`;
+    } else {
+      const lockedMsg = m.locked_msg.replace('{left}', Math.max(0, left));
+      return `
+        <div class="milestone-card locked">
+          <div class="milestone-day-badge">
+            <span class="milestone-emoji">${m.emoji}</span>
+            ${m.title}
+          </div>
+          <div class="milestone-title">${m.subtitle}</div>
+          <div class="milestone-progress-wrap">
+            <div class="milestone-progress-bar">
+              <div class="milestone-progress-fill" style="width:${progress}%"></div>
+            </div>
+            <div class="milestone-progress-label">
+              <span>${totalDays} 天</span>
+              <span>${m.days} 天</span>
+            </div>
+          </div>
+          <div class="milestone-locked-msg">${lockedMsg}</div>
+        </div>`;
+    }
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════
+   URL HASH ROUTING
+═══════════════════════════════════════════════ */
+function handleHashRoute() {
+  const hash = location.hash.replace('#', '');
+  const valid = ['snapshot','weeks','trends','settings','calendar','milestones'];
+  if (valid.includes(hash)) goPage(hash);
+}
+
+/* ═══════════════════════════════════════════════
    AUTH FLOW
 ═══════════════════════════════════════════════ */
 async function handleOAuthCallback() {
@@ -1694,9 +2256,15 @@ function patchText(wrapId, cls, newId, dflt) {
 
   if (Auth.getToken() || wasCallback) {
     showApp();
+    handleHashRoute();            // URL hash → 正確頁面（從 LINE 連結進入）
     await renderSnapshot();       // 先顯示本地資料
     await Sync.run(true);         // 再線上增量同步
   }
+
+  // 支援瀏覽器上下頁切換
+  window.addEventListener('hashchange', () => {
+    if (Auth.getToken()) handleHashRoute();
+  });
 })();
 
 // Resize 重繪

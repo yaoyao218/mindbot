@@ -36,6 +36,24 @@ async def handle_postback(event: PostbackEvent, line_bot_api: MessagingApi):
         await handle_checkin_selection(user_id, reply_token, params, line_bot_api)
     elif action == "checkin_action":
         await handle_checkin_action(user_id, reply_token, params, line_bot_api)
+    elif action == "onboard":
+        await handle_onboard(user_id, reply_token, params, line_bot_api)
+
+
+async def handle_onboard(
+    user_id: str,
+    reply_token: str,
+    params: dict,
+    line_bot_api: MessagingApi
+):
+    from handlers.onboarding import send_feature_menu, send_feature_detail, send_start_reply
+    page = params.get("page", "menu")
+    if page == "menu":
+        await send_feature_menu(reply_token, line_bot_api)
+    elif page == "start":
+        await send_start_reply(reply_token, line_bot_api)
+    else:
+        await send_feature_detail(page, reply_token, line_bot_api)
 
 
 async def handle_checkin_selection(
