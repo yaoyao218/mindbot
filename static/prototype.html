@@ -1390,16 +1390,21 @@ const IDB = (() => {
   function open() {
     if (db) return Promise.resolve(db);
     return new Promise((res, rej) => {
-      const req = indexedDB.open('mindbot', 2);
+      // v3: conversations 改用 msg_key 做 keyPath（去重）
+      const req = indexedDB.open('mindbot', 3);
       req.onupgradeneeded = e => {
         const d = e.target.result;
         if (!d.objectStoreNames.contains('weekly')) {
           const s = d.createObjectStore('weekly', { keyPath: 'week_id' });
           s.createIndex('user_id', 'user_id');
         }
-        if (!d.objectStoreNames.contains('conversations')) {
-          d.createObjectStore('conversations', { keyPath: 'id', autoIncrement: true });
+        // 舊版 conversations（autoIncrement）→ 刪掉重建
+        if (d.objectStoreNames.contains('conversations')) {
+          d.deleteObjectStore('conversations');
         }
+        // 新版：msg_key = created_at + role，確保去重
+        const cs = d.createObjectStore('conversations', { keyPath: 'msg_key' });
+        cs.createIndex('created_at', 'created_at');
       };
       req.onsuccess = e => { db = e.target.result; res(db); };
       req.onerror = () => rej(req.error);
@@ -1508,9 +1513,12 @@ const Sync = {
       const { reports = [], count = 0 } = await apiFetch(url);
       for (const r of reports) await IDB.put('weekly', r);
 
-      // 2. 拉取對話緩衝
+      // 2. 拉取對話緩衝（新訊息存入 IDB，去重）
       const { messages = [] } = await apiFetch('/api/sync/conversations');
-      for (const m of messages) await IDB.put('conversations', m);
+      if (messages.length) {
+        await _saveConvsToIDB(messages);
+        _chatMessages = await _loadConvsFromIDB();
+      }
 
       const now = new Date().toLocaleTimeString('zh-Hant', { hour:'2-digit', minute:'2-digit' });
       const msg = count > 0 ? `已同步 ${count} 份新週報・${now}` : `最後同步：${now}`;
@@ -2183,13 +2191,46 @@ async function renderMilestones() {
 ═══════════════════════════════════════════════ */
 let _chatMessages = [];
 
-async function loadConversations() {
+// msg_key：用 created_at + role 組合，確保同一筆不重複存
+function _msgKey(m) {
+  return (m.created_at || Date.now()) + '_' + (m.role || 'user');
+}
+
+// 把 server 回傳的訊息存入 IndexedDB（去重）
+async function _saveConvsToIDB(msgs) {
+  for (const m of msgs) {
+    const obj = { ...m, msg_key: _msgKey(m) };
+    try { await IDB.put('conversations', obj); } catch(e) {}
+  }
+}
+
+// 從 IndexedDB 讀所有對話，按時間排序
+async function _loadConvsFromIDB() {
   try {
-    const data = await apiFetch('/api/conversations?limit=200');
-    _chatMessages = data.messages || [];
+    const all = await IDB.getAll('conversations');
+    return all.sort((a, b) => (a.created_at || '') < (b.created_at || '') ? -1 : 1);
+  } catch(e) { return []; }
+}
+
+async function loadConversations() {
+  // 1. 先從 IndexedDB 讀（即使 Railway 已重啟，本地仍有資料）
+  const local = await _loadConvsFromIDB();
+  if (local.length) {
+    _chatMessages = local;
     if (currentPage === 'chat') renderChat();
+  }
+
+  // 2. 從 Railway 同步新訊息（補充本地沒有的）
+  try {
+    const data = await apiFetch('/api/conversations?limit=300');
+    const server = data.messages || [];
+    if (server.length) {
+      await _saveConvsToIDB(server);          // 儲存到 IndexedDB（去重）
+      _chatMessages = await _loadConvsFromIDB(); // 重新從 IDB 讀（合併後）
+      if (currentPage === 'chat') renderChat();
+    }
   } catch(e) {
-    console.warn('[chat] load failed', e);
+    console.warn('[chat] server sync failed, using local data', e);
   }
 }
 
