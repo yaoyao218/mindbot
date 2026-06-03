@@ -8,7 +8,8 @@ from linebot.v3.messaging import (
     TextMessage, FlexMessage, FlexContainer
 )
 
-APP_URL = "https://web-production-dd506.up.railway.app"
+APP_URL  = "https://web-production-dd506.up.railway.app"
+LIFF_URL = "https://liff.line.me/2010279401-zI4pqH8D"
 
 # ── 色彩常數 ─────────────────────────────────────────────────
 _GREEN   = "#1D9E75"
@@ -230,7 +231,7 @@ def _diary_detail_flex() -> FlexMessage:
                     "action": {
                         "type": "uri",
                         "label": "🌐 查看我的情緒月曆",
-                        "uri": f"{APP_URL}/app#calendar"
+                        "uri": f"{LIFF_URL}?target=calendar"
                     },
                     "style": "primary",
                     "color": _GREEN,
@@ -317,7 +318,7 @@ def _website_detail_flex() -> FlexMessage:
                     "・情緒月曆與走勢\n・本週 / 本月關鍵詞\n・對話里程碑回顧\n・每週摘要報告",
                     "sm", "#555555", "xs"
                 ),
-                _text_row(APP_URL.replace("https://", ""), "xs", _GRAY, "lg")
+                _text_row("心事日記 · LINE 專屬 Web App", "xs", _GRAY, "lg")
             ]
         },
         "footer": {
@@ -330,8 +331,8 @@ def _website_detail_flex() -> FlexMessage:
                     "type": "button",
                     "action": {
                         "type": "uri",
-                        "label": "前往個人分析網站",
-                        "uri": f"{APP_URL}/app"
+                        "label": "開啟心事日記 App",
+                        "uri": LIFF_URL
                     },
                     "style": "primary",
                     "color": _GREEN,

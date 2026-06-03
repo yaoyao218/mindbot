@@ -107,7 +107,7 @@ WEBSITE_KEYWORDS  = ["看紀錄", "我的記錄", "心情記錄", "情緒記錄"
 LOGIN_KEYWORDS    = ["登入", "登入網站", "進入網站", "網站登入", "login"]
 PUSH_OFF_KEYWORDS = ["關閉推播", "取消推播", "不要推播", "停止推播"]
 
-APP_URL = "https://web-production-dd506.up.railway.app/app"
+APP_URL = "https://liff.line.me/2010279401-zI4pqH8D"
 
 
 # ════════════════════════════════════════════════════════════
