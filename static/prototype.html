@@ -955,6 +955,14 @@ canvas { display: block; width: 100% !important; }
       </svg>
       使用 LINE 登入
     </a>
+    <!-- 登入錯誤訊息（永久顯示，不會消失）-->
+    <div id="auth-error" style="
+      display:none; margin-top:20px;
+      background:rgba(200,60,60,.15); border:1px solid rgba(200,60,60,.3);
+      border-radius:8px; padding:12px 16px;
+      font-size:12px; color:#e07070; line-height:1.7;
+      text-align:left; word-break:break-all;
+    "></div>
     <p class="auth-note">登入後資料同步至此裝置<br>不會上傳至任何雲端伺服器</p>
   </div>
 </div>
@@ -2298,36 +2306,49 @@ async function handleOAuthCallback() {
   const code = p.get('code'), state = p.get('state');
   if (!code) return false;
 
+  function showAuthError(msg) {
+    const el = document.getElementById('auth-error');
+    if (el) { el.textContent = msg; el.style.display = 'block'; }
+    console.error('[Auth]', msg);
+  }
+
   const savedState = localStorage.getItem('oauth_state');
-  console.log('[Auth] state from URL:', state, '| saved:', savedState);
+  console.log('[Auth] code:', code?.slice(0,8), 'state:', state?.slice(0,8), 'saved:', savedState?.slice(0,8));
+
   if (state !== savedState) {
-    showToast('登入狀態錯誤（state 不符）');
-    console.error('[Auth] state mismatch');
+    showAuthError(
+      '❌ 登入狀態不符（state mismatch）\n\n' +
+      'URL state:   ' + (state || '空') + '\n' +
+      'Saved state: ' + (savedState || '空（未找到）') + '\n\n' +
+      '請重新點擊「使用 LINE 登入」'
+    );
     return false;
   }
 
   try {
-    console.log('[Auth] exchanging code, redirect_uri:', CFG.REDIRECT_URI);
+    const redirectUri = location.origin + '/callback';
+    console.log('[Auth] redirect_uri:', redirectUri);
+
     const resp = await fetch('/api/auth/line_callback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, redirect_uri: CFG.REDIRECT_URI }),
+      body: JSON.stringify({ code, redirect_uri: redirectUri }),
     });
+
+    const bodyText = await resp.text();
     if (!resp.ok) {
-      const errText = await resp.text();
-      console.error('[Auth] server error:', resp.status, errText);
-      showToast('登入失敗：' + errText.slice(0, 60));
+      showAuthError('❌ Token 交換失敗 (HTTP ' + resp.status + ')\n\n' + bodyText);
       return false;
     }
-    const { token, user_id, display_name } = await resp.json();
-    console.log('[Auth] got token, user_id:', user_id);
+
+    const { token, user_id, display_name } = JSON.parse(bodyText);
+    console.log('[Auth] success, user_id:', user_id);
     Auth.set(token, user_id, display_name);
-    localStorage.removeItem('oauth_state'); // 清掉已使用的 state
+    localStorage.removeItem('oauth_state');
     history.replaceState({}, '', '/app');
     return true;
   } catch(e) {
-    console.error('[Auth] catch:', e);
-    showToast('登入失敗：' + e.message);
+    showAuthError('❌ 網路錯誤：' + e.message);
     return false;
   }
 }
