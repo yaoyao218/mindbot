@@ -926,7 +926,7 @@ canvas { display: block; width: 100% !important; }
     <h1 class="auth-title">心事日記</h1>
     <div class="auth-divider"></div>
     <p class="auth-sub">你的私人情緒回顧空間<br>資料只存在你的裝置上</p>
-    <a id="line-login-btn" class="line-btn" href="#" onclick="enterApp(); return false;">
+    <a id="line-login-btn" class="line-btn" href="#" onclick="this.href = Auth.buildLineURL(); return true;">
       <svg width="20" height="20" viewBox="0 0 48 48" fill="white">
         <path d="M24 4C12.95 4 4 11.82 4 21.4c0 6.18 4.1 11.6 10.3 14.74L12 44l9.32-4.9c.87.12 1.76.19 2.68.19 11.05 0 20-7.82 20-17.4C44 11.82 35.05 4 24 4z"/>
       </svg>
@@ -2249,10 +2249,15 @@ function patchText(wrapId, cls, newId, dflt) {
   await IDB.open();
   initOffline();
 
-  document.getElementById('line-login-btn').href = Auth.buildLineURL();
-
-  // OAuth callback
+  // OAuth callback 要先處理，之後才設定登入按鈕
+  // （否則 buildLineURL 會覆蓋 localStorage 的 state）
   const wasCallback = await handleOAuthCallback();
+
+  // 非 callback 頁面才設登入連結
+  if (!wasCallback) {
+    const loginBtn = document.getElementById('line-login-btn');
+    if (loginBtn) loginBtn.href = Auth.buildLineURL();
+  }
 
   if (Auth.getToken() || wasCallback) {
     showApp();
