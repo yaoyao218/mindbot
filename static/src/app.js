@@ -22,38 +22,50 @@ class AppController {
 
   /* ── 啟動入口 ─────────────────────────────────── */
   async init() {
-    this._token    = localStorage.getItem('mb_token');
-    this._userId   = localStorage.getItem('mb_user_id');
-    this._userName = localStorage.getItem('mb_name') || '用戶';
-
-    // 載入 LIFF_ID 後初始化 LIFF
     try {
-      const cfg = await fetch('/api/config').then(r => r.json());
-      if (cfg.liff_id && window.liff) {
-        await this._initLiff(cfg.liff_id);
+      this._token    = localStorage.getItem('mb_token');
+      this._userId   = localStorage.getItem('mb_user_id');
+      this._userName = localStorage.getItem('mb_name') || '用戶';
+
+      // 載入 LIFF_ID 後初始化 LIFF
+      try {
+        const cfg = await fetch('/api/config').then(r => r.json());
+        if (cfg.liff_id && window.liff) {
+          await this._initLiff(cfg.liff_id);
+        }
+      } catch (err) {
+        console.warn('[App] config fetch / LIFF init failed, using cached token:', err);
       }
-    } catch (err) {
-      console.warn('[App] config fetch / LIFF init failed, using cached token:', err);
+
+      if (!this._token) {
+        document.getElementById('loading-screen').innerHTML =
+          '<p class="text-red-400 text-sm px-8 text-center">請先登入 LINE</p>';
+        return;
+      }
+
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('app-screen').style.display     = 'block';
+
+      this._bindNav();
+      this._bindGlobalCalendarDelegate();
+
+      this.navigate(window.location.hash || '#dashboard');
+      this.syncBackground().catch(e => console.warn('[Sync]', e));
+
+      window.addEventListener('hashchange', () => {
+        this.navigate(window.location.hash);
+      });
+
+    } catch (criticalErr) {
+      // 極端降級防線：任何意外崩潰仍保證開門
+      console.error('[App] init critical error, forcing navigate:', criticalErr);
+      try {
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('app-screen').style.display     = 'block';
+        this._bindNav();
+        this.navigate('#dashboard');
+      } catch (_) { /* DOM 也爛了就放棄 */ }
     }
-
-    if (!this._token) {
-      document.getElementById('loading-screen').innerHTML =
-        '<p class="text-red-400 text-sm px-8 text-center">請先登入 LINE</p>';
-      return;
-    }
-
-    document.getElementById('loading-screen').style.display = 'none';
-    document.getElementById('app-screen').style.display     = 'block';
-
-    this._bindNav();
-    this._bindGlobalCalendarDelegate();
-
-    this.navigate(window.location.hash || '#dashboard');
-    this.syncBackground();
-
-    window.addEventListener('hashchange', () => {
-      this.navigate(window.location.hash);
-    });
   }
 
   /* ── LIFF 初始化 ─────────────────────────────── */
