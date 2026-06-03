@@ -2297,16 +2297,39 @@ async function handleOAuthCallback() {
   const p    = new URLSearchParams(location.search);
   const code = p.get('code'), state = p.get('state');
   if (!code) return false;
-  if (state !== localStorage.getItem('oauth_state')) { showToast('登入狀態錯誤'); return false; }
+
+  const savedState = localStorage.getItem('oauth_state');
+  console.log('[Auth] state from URL:', state, '| saved:', savedState);
+  if (state !== savedState) {
+    showToast('登入狀態錯誤（state 不符）');
+    console.error('[Auth] state mismatch');
+    return false;
+  }
+
   try {
-    const { token, user_id, display_name } = await apiFetch('/api/auth/line_callback', {
+    console.log('[Auth] exchanging code, redirect_uri:', CFG.REDIRECT_URI);
+    const resp = await fetch('/api/auth/line_callback', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, redirect_uri: CFG.REDIRECT_URI }),
     });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error('[Auth] server error:', resp.status, errText);
+      showToast('登入失敗：' + errText.slice(0, 60));
+      return false;
+    }
+    const { token, user_id, display_name } = await resp.json();
+    console.log('[Auth] got token, user_id:', user_id);
     Auth.set(token, user_id, display_name);
-    history.replaceState({}, '', '/');
+    localStorage.removeItem('oauth_state'); // 清掉已使用的 state
+    history.replaceState({}, '', '/app');
     return true;
-  } catch { showToast('登入失敗，請重試'); return false; }
+  } catch(e) {
+    console.error('[Auth] catch:', e);
+    showToast('登入失敗：' + e.message);
+    return false;
+  }
 }
 
 function showApp() {

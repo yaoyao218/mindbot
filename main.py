@@ -234,6 +234,10 @@ async def line_callback(request: Request):
     code = body.get("code")
     redirect_uri = body.get("redirect_uri")
 
+    client_id     = os.environ.get("LINE_LOGIN_CHANNEL_ID", "")
+    client_secret = os.environ.get("LINE_LOGIN_CHANNEL_SECRET", "")
+    print(f"[LineCallback] client_id={client_id[:4]}… redirect_uri={redirect_uri}")
+
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.post(
             "https://api.line.me/oauth2/v2.1/token",
@@ -241,12 +245,18 @@ async def line_callback(request: Request):
                 "grant_type":    "authorization_code",
                 "code":          code,
                 "redirect_uri":  redirect_uri,
-                "client_id":     os.environ.get("LINE_LOGIN_CHANNEL_ID", ""),
-                "client_secret": os.environ.get("LINE_LOGIN_CHANNEL_SECRET", ""),
+                "client_id":     client_id,
+                "client_secret": client_secret,
             },
         )
+
     if r.status_code != 200:
-        raise HTTPException(status_code=400, detail="Token exchange failed")
+        err = r.text[:200]
+        print(f"[LineCallback] Token exchange failed {r.status_code}: {err}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Token exchange failed: {r.status_code} {err}"
+        )
 
     access_token = r.json()["access_token"]
 
