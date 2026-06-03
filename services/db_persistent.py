@@ -51,6 +51,44 @@ async def get_pool() -> aiomysql.Pool:
 
 _CREATE_TABLES = [
     """
+    CREATE TABLE IF NOT EXISTS daily_questions (
+        id              BIGINT      AUTO_INCREMENT PRIMARY KEY,
+        user_id         VARCHAR(64) NOT NULL,
+        question_text   TEXT        NOT NULL,
+        sent_date       DATE        NOT NULL,
+        UNIQUE KEY uq_user_date (user_id, sent_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS push_schedule (
+        user_id         VARCHAR(64) PRIMARY KEY,
+        push_hour       TINYINT     NOT NULL DEFAULT 21,
+        push_minute     TINYINT     NOT NULL DEFAULT 0,
+        enabled         TINYINT     NOT NULL DEFAULT 1,
+        updated_at      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS emotion_calendar (
+        id              BIGINT      AUTO_INCREMENT PRIMARY KEY,
+        user_id         VARCHAR(64) NOT NULL,
+        record_date     DATE        NOT NULL,
+        emotion_emoji   VARCHAR(8),
+        emotion_label   VARCHAR(32),
+        UNIQUE KEY uq_user_date (user_id, record_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS milestone_log (
+        id              BIGINT      AUTO_INCREMENT PRIMARY KEY,
+        user_id         VARCHAR(64) NOT NULL,
+        milestone_days  TINYINT     NOT NULL,
+        triggered_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_user_milestone (user_id, milestone_days)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
     CREATE TABLE IF NOT EXISTS sessions (
         user_id         VARCHAR(64)  PRIMARY KEY,
         data            JSON         NOT NULL,
@@ -120,16 +158,40 @@ _CREATE_TABLES = [
         UNIQUE KEY uq_user_ym (user_id, year_month)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+    """
+    CREATE TABLE IF NOT EXISTS emotion_dictionary (
+        id          INT         AUTO_INCREMENT PRIMARY KEY,
+        user_id     VARCHAR(64) NOT NULL,
+        word_id     VARCHAR(32) NOT NULL,
+        unlocked_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_user_word (user_id, word_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+]
+
+# Streak + Tree 欄位 migration（ADD COLUMN IF NOT EXISTS 需 MariaDB 10.3+）
+_ALTER_SESSIONS = [
+    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS streak_count    INT  DEFAULT 0",
+    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS streak_last_day DATE DEFAULT NULL",
+    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tree_stage      TINYINT  DEFAULT 0",
+    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tree_water      SMALLINT DEFAULT 0",
+    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tree_sun        SMALLINT DEFAULT 0",
+    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tree_nutrient   SMALLINT DEFAULT 0",
 ]
 
 
 async def init_db() -> None:
-    """建立所有資料表（幂等）"""
+    """建立所有資料表，並執行欄位 migration（幂等）"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             for ddl in _CREATE_TABLES:
                 await cur.execute(ddl)
+            for alter in _ALTER_SESSIONS:
+                try:
+                    await cur.execute(alter)
+                except Exception as e:
+                    print(f"[DB] ALTER skipped (may already exist): {e}")
     print("[DB] Tables initialized")
 
 
@@ -384,3 +446,242 @@ async def save_archive(
                     raw_count,
                 )
             )
+
+
+# ── Emotion Dictionary ───────────────────────────────────
+
+async def get_unlocked_words(user_id: str) -> set[str]:
+    """取得已解鎖的詞 ID 集合"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT word_id FROM emotion_dictionary WHERE user_id = %s",
+                (user_id,)
+            )
+            rows = await cur.fetchall()
+            return {r[0] for r in rows}
+
+
+async def unlock_emotion_word(user_id: str, word_id: str) -> None:
+    """解鎖一個詞（已存在則忽略）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                INSERT IGNORE INTO emotion_dictionary (user_id, word_id)
+                VALUES (%s, %s)
+                """,
+                (user_id, word_id)
+            )
+
+
+# ── Streak（從 sessions 欄位讀寫）───────────────────────
+
+async def update_streak_db(
+    user_id: str, streak_count: int, streak_last_day: str
+) -> None:
+    """同步 streak 到 sessions 專屬欄位（方便 SQL 查詢）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE sessions
+                SET streak_count = %s, streak_last_day = %s
+                WHERE user_id = %s
+                """,
+                (streak_count, streak_last_day, user_id)
+            )
+
+
+# ── Tree（從 sessions 欄位讀寫）─────────────────────────
+
+async def update_tree_db(
+    user_id: str,
+    stage: int, water: int, sun: int, nutrient: int
+) -> None:
+    """同步樹狀態到 sessions 專屬欄位"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE sessions
+                SET tree_stage = %s, tree_water = %s,
+                    tree_sun = %s, tree_nutrient = %s
+                WHERE user_id = %s
+                """,
+                (stage, water, sun, nutrient, user_id)
+            )
+
+
+# ── Arousal 歷史（天氣系統用）────────────────────────────
+
+async def get_arousal_history_7d(user_id: str) -> list[int]:
+    """取得近 7 天每輪的 Arousal，供天氣計算"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT arousal FROM session_psych
+                WHERE user_id = %s
+                  AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                  AND arousal IS NOT NULL
+                ORDER BY created_at
+                """,
+                (user_id,)
+            )
+            rows = await cur.fetchall()
+            return [r[0] for r in rows]
+
+
+# ── Emotion Calendar ──────────────────────────────────────
+
+async def save_emotion_calendar(
+    user_id: str, record_date: "date", emoji: str, label: str
+) -> None:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                INSERT INTO emotion_calendar (user_id, record_date, emotion_emoji, emotion_label)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    emotion_emoji = VALUES(emotion_emoji),
+                    emotion_label = VALUES(emotion_label)
+                """,
+                (user_id, record_date, emoji, label)
+            )
+
+
+async def get_emotion_calendar(
+    user_id: str, year: int, month: int
+) -> list[dict]:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """
+                SELECT record_date, emotion_emoji, emotion_label
+                FROM emotion_calendar
+                WHERE user_id = %s
+                  AND YEAR(record_date) = %s
+                  AND MONTH(record_date) = %s
+                ORDER BY record_date
+                """,
+                (user_id, year, month)
+            )
+            rows = await cur.fetchall()
+            for r in rows:
+                if hasattr(r.get("record_date"), "isoformat"):
+                    r["record_date"] = r["record_date"].isoformat()
+            return rows
+
+
+async def get_streak_days(user_id: str) -> int:
+    """從 emotion_calendar 計算連續記錄天數"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT record_date FROM emotion_calendar
+                WHERE user_id = %s
+                ORDER BY record_date DESC
+                LIMIT 100
+                """,
+                (user_id,)
+            )
+            rows = await cur.fetchall()
+    if not rows:
+        return 0
+    from datetime import date as _date, timedelta
+    today = _date.today()
+    streak = 0
+    for i, row in enumerate(rows):
+        expected = today - timedelta(days=i)
+        actual = row[0] if isinstance(row[0], _date) else _date.fromisoformat(str(row[0]))
+        if actual == expected:
+            streak += 1
+        else:
+            break
+    return streak
+
+
+# ── Milestone Log ─────────────────────────────────────────
+
+async def check_and_mark_milestone(user_id: str, days: int) -> bool:
+    """檢查里程碑是否已觸發；若未觸發則標記並回傳 True"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            try:
+                await cur.execute(
+                    """
+                    INSERT IGNORE INTO milestone_log (user_id, milestone_days)
+                    VALUES (%s, %s)
+                    """,
+                    (user_id, days)
+                )
+                return cur.rowcount == 1
+            except Exception:
+                return False
+
+
+# ── Conversation Days Count（用於里程碑判斷）─────────────
+
+async def count_conversation_days(user_id: str) -> int:
+    """計算用戶有過對話的不重複天數"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT COUNT(DISTINCT DATE(created_at))
+                FROM session_messages
+                WHERE user_id = %s AND role = 'user'
+                """,
+                (user_id,)
+            )
+            row = await cur.fetchone()
+            return row[0] if row else 0
+
+
+# ── Top Keywords（里程碑用）──────────────────────────────
+
+async def get_top_keywords(user_id: str, limit: int = 5) -> list[str]:
+    """從 session_messages 統計最常出現的關鍵詞"""
+    import re
+    from collections import Counter
+
+    STOPWORDS = {
+        "的", "了", "是", "我", "你", "他", "她", "它", "都", "也", "很", "在",
+        "有", "就", "不", "這", "那", "但", "和", "或", "把", "被", "會", "想",
+        "說", "到", "從", "以", "為", "與", "而", "其", "如", "所", "已", "好",
+        "嗯", "啊", "哦", "喔", "吧", "呢", "嗎", "呀", "什麼", "怎麼", "為什麼",
+        "因為", "所以", "然後", "但是", "不過", "還是", "還有", "一個", "一種",
+        "感覺", "覺得", "知道", "沒有", "可以", "可能", "應該", "需要", "自己",
+    }
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT content FROM session_messages
+                WHERE user_id = %s AND role = 'user'
+                ORDER BY created_at DESC
+                LIMIT 200
+                """,
+                (user_id,)
+            )
+            rows = await cur.fetchall()
+
+    texts = " ".join(r[0] for r in rows)
+    words = re.findall(r"[一-鿿]{2,4}", texts)
+    counter = Counter(w for w in words if w not in STOPWORDS)
+    return [w for w, _ in counter.most_common(limit)]

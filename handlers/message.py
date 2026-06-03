@@ -11,9 +11,20 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import MessageEvent
 
 # P0
-from services.fast_path import evaluate as fast_evaluate, FastPathResult
+from services.fast_path import fast_path_eval, FastPathResult
 from services.interceptor import process_response
 from services.circuit_breaker import get_breaker
+from services.nudge import (
+    update_streak, check_short_reply, detect_task_completion,
+    should_show_closing, get_closing_prompt, update_tree,
+    scan_emotion_keywords, check_milestone,
+    infer_emotion_emoji, save_checkin_emotion, format_checkin_response,
+)
+from services.symbolic import detect_closing_signal, select_symbol
+from services.daily_question import (
+    parse_push_time, set_push_schedule,
+    PUSH_SETUP_KEYWORDS, PUSH_CANCEL_KEYWORDS,
+)
 
 # P1
 from services.clinical_diagnosis import diagnose, get_rupture_repair_response, DiagnosisResult
@@ -88,6 +99,32 @@ try:
         except Exception:
             pass
 
+    async def get_conversation_messages_today(user_id):
+        try:
+            from datetime import date
+            pool = await _dbp.get_pool()
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        SELECT content FROM session_messages
+                        WHERE user_id = %s AND role = 'user'
+                          AND DATE(created_at) = %s
+                        ORDER BY created_at
+                        """,
+                        (user_id, date.today())
+                    )
+                    rows = await cur.fetchall()
+                    return [r[0] for r in rows]
+        except Exception:
+            return []
+
+    async def get_unlocked_words(user_id):
+        try:
+            return await _dbp.get_unlocked_words(user_id)
+        except Exception:
+            return set()
+
     DB_MODE = "persistent_with_fallback"
 
 except ImportError:
@@ -99,6 +136,7 @@ except ImportError:
     count_today_referrals = _zero
     log_referral = _noop
     save_checkin = _noop
+    async def get_unlocked_words(user_id): return set()
     DB_MODE = "memory"
 
 CHECKIN_KEYWORDS  = ["簽到", "check in", "checkin", "今天狀態"]
@@ -107,6 +145,7 @@ HELP_KEYWORDS     = ["說明", "help", "怎麼用", "功能"]
 STOP_KEYWORDS     = ["停止", "結束對話", "不想說了", "先這樣"]
 WEBSITE_KEYWORDS  = ["看紀錄", "我的記錄", "心情記錄", "情緒記錄", "查看日記",
                      "歷史紀錄", "心情日記", "報告", "週報", "統計"]
+PUSH_OFF_KEYWORDS = ["關閉推播", "取消推播", "不要推播", "停止推播"]
 
 APP_URL = "https://web-production-dd506.up.railway.app/app"
 
@@ -140,6 +179,42 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         await send_website_link(reply_token, line_bot_api)
         return
 
+    # ── 推播時間設定 ─────────────────────────────────────
+    if any(kw in text for kw in PUSH_SETUP_KEYWORDS):
+        parsed = parse_push_time(text)
+        if parsed:
+            h, m = parsed
+            await set_push_schedule(user_id, h, m)
+            await _reply(
+                reply_token,
+                f"好的，每天 {h:02d}:{m:02d} 我會傳今日一問給你 🌙\n\n"
+                f"輸入「取消推播」可以隨時關閉。",
+                line_bot_api
+            )
+        else:
+            await _reply(
+                reply_token,
+                "請告訴我你希望幾點收到提問 🌙\n例如：「設定推播 21:00」或「每天晚上9點提醒我」",
+                line_bot_api
+            )
+        return
+
+    if any(kw in text for kw in PUSH_OFF_KEYWORDS):
+        try:
+            await set_push_schedule(user_id, 0, 0)
+            from services.db_persistent import get_pool
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        "UPDATE push_schedule SET enabled = 0 WHERE user_id = %s",
+                        (user_id,)
+                    )
+        except Exception:
+            pass
+        await _reply(reply_token, "已關閉每日推播 🌙\n想重新開啟時，傳「設定推播」給我。", line_bot_api)
+        return
+
     # ── 停止對話 ────────────────────────────────────────────
     session_check = await get_session(user_id)
     if any(kw in text for kw in STOP_KEYWORDS) and session_check.get("in_dialog"):
@@ -158,8 +233,17 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
         await handle_checkin_supplement(event, line_bot_api, session, text)
         return
 
+    # ── 短訊息接話（在 Fast-Path 前攔截）────────────────────
+    short_reply = check_short_reply(text)
+    if short_reply and not session.get("in_dialog"):
+        await _reply(reply_token, short_reply, line_bot_api)
+        await append_message(user_id, "user", text)
+        await append_message(user_id, "bot", short_reply)
+        return
+
     # ── 步驟一：Fast-Path 靜態評估 ──────────────────────────
-    fp_result: FastPathResult = fast_evaluate(text)
+    fp_result: FastPathResult = fast_path_eval(text, session.get("history", []), session)
+    session["fast_path_state"] = fp_result.state_label
 
     # ── 步驟二：危機偵測（雙層）────────────────────────────
     is_crisis = fp_result.is_crisis or await detect_crisis(text)
@@ -303,6 +387,60 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
     if referral_suffix:
         reply_text = reply_text.rstrip() + "\n\n" + referral_suffix
 
+    # ── Nudge Pipeline ───────────────────────────────────────
+    arousal_now = diagnosis.arousal_level if diagnosis else 3
+
+    # A. Streak 更新（Arousal ≤ 3 才附加訊息）
+    session, streak_msg = update_streak(session)
+    if streak_msg and arousal_now <= 3:
+        reply_text = reply_text.rstrip() + "\n\n" + streak_msg
+
+    # B. 週任務完成偵測
+    task_msg = detect_task_completion(text, session)
+    if task_msg:
+        reply_text = reply_text.rstrip() + "\n\n" + task_msg
+
+    # C. 對話結尾感（Arousal ≤ 3 才附加）
+    closing_triggered = arousal_now <= 3 and should_show_closing(session, arousal_now)
+    if closing_triggered:
+        # 偵測用戶是否本輪就是收尾語 → 直接用象徵系統結尾
+        if detect_closing_signal(text):
+            detected_emotion = session.get("psych", {}).get("emotion", "平靜") or "平靜"
+            symbol_msg = select_symbol(detected_emotion)
+            reply_text = reply_text.rstrip() + "\n\n" + symbol_msg
+        else:
+            reply_text = reply_text.rstrip() + "\n\n" + get_closing_prompt(session)
+
+    # C2. 用戶主動收尾（即使未達觸發條件）
+    elif detect_closing_signal(text) and session.get("in_dialog") and arousal_now <= 3:
+        detected_emotion = session.get("psych", {}).get("emotion", "平靜") or "平靜"
+        symbol_msg = select_symbol(detected_emotion)
+        reply_text = reply_text.rstrip() + "\n\n" + symbol_msg
+
+    # D. 成長樹（每 5 輪 +1 sun）
+    total_turn = session.get("total_turn", 0)
+    if total_turn > 0 and total_turn % 5 == 0:
+        session, tree_msg = update_tree(session, "dialog_5turn")
+        if tree_msg:
+            reply_text = reply_text.rstrip() + "\n\n" + tree_msg
+
+    # E. 情緒詞典解鎖（非同步，不阻塞回覆）
+    try:
+        unlocked = await get_unlocked_words(user_id)
+        word_unlock_msg = await scan_emotion_keywords(text, user_id, unlocked)
+        if word_unlock_msg:
+            reply_text = reply_text.rstrip() + "\n\n" + word_unlock_msg
+    except Exception:
+        pass
+
+    # F. P1-A 里程碑回饋（結尾後觸發，非同步 push）
+    milestone_msg = await check_milestone(user_id)
+    if milestone_msg:
+        reply_text = reply_text.rstrip() + "\n\n" + milestone_msg
+
+    # 儲存 prev_arousal 供下輪使用
+    session["prev_arousal"] = arousal_now
+
     # 回覆並儲存
     session["history"].append({"role": "bot", "text": reply_text})
     await save_session(user_id, session)
@@ -347,29 +485,51 @@ async def handle_checkin_supplement(event, line_bot_api, session, text):
     user_id = event.source.user_id
     reply_token = event.reply_token
     pending = session["pending_checkin"]
+    checkin_emotion = pending.get("emotion", "")
 
     if text == "跳過":
         await save_checkin(user_id, {
-            "emotion": pending["emotion"],
+            "emotion": checkin_emotion,
             "timestamp": pending["timestamp"]
         })
         session.pop("pending_checkin")
+        # 更新情緒月曆
+        emoji, label = await infer_emotion_emoji([], checkin_emotion)
+        await save_checkin_emotion(user_id, emoji, label)
+        # 計算 streak
+        try:
+            from services.db_persistent import get_streak_days
+            streak = await get_streak_days(user_id)
+        except Exception:
+            streak = 0
+        checkin_resp = format_checkin_response(streak, emoji)
         await save_session(user_id, session)
-        await _reply(reply_token, "已記錄 ✓\n\n如果之後想聊聊，隨時傳訊息給我。", line_bot_api)
+        await _reply(reply_token, f"{checkin_resp}\n\n如果之後想聊聊，隨時傳訊息給我。", line_bot_api)
         await send_website_link_push(user_id, line_bot_api)
     else:
-        result = await analyze_checkin(text, pending["emotion"])
+        result = await analyze_checkin(text, checkin_emotion)
         await save_checkin(user_id, {
-            "emotion": pending["emotion"],
+            "emotion": checkin_emotion,
             "cognition": result.get("cognition"),
             "need": result.get("need"),
             "user_text": text,
             "timestamp": pending["timestamp"]
         })
         session.pop("pending_checkin")
+        # 更新情緒月曆（有對話內容時用 AI 推斷）
+        today_msgs = [text]
+        emoji, label = await infer_emotion_emoji(today_msgs, checkin_emotion)
+        await save_checkin_emotion(user_id, emoji, label)
+        # 計算 streak
+        try:
+            from services.db_persistent import get_streak_days
+            streak = await get_streak_days(user_id)
+        except Exception:
+            streak = 0
+        checkin_resp = format_checkin_response(streak, emoji)
         await save_session(user_id, session)
         reflection = result.get("reflection", "謝謝你願意說出來。")
-        await _reply(reply_token, f"已記錄 ✓\n\n{reflection}", line_bot_api)
+        await _reply(reply_token, f"{checkin_resp}\n\n{reflection}", line_bot_api)
         await send_website_link_push(user_id, line_bot_api)
 
 

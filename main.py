@@ -35,16 +35,44 @@ async def startup():
     except Exception as e:
         print(f"[Startup] DB init skipped (memory mode): {e}")
 
-    # 週排程（APScheduler）
+    # 排程（APScheduler）
     try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
         from services.weekly_scheduler import run_weekly_archive
+
         scheduler = AsyncIOScheduler(timezone="Asia/Taipei")
+
         # 週一 03:00 台灣時間 = UTC 週日 19:00
         scheduler.add_job(run_weekly_archive, "cron",
                           day_of_week="sun", hour=19, minute=0)
+
+        # P0-A 今日一問：每分鐘檢查是否有用戶的推播時間到了
+        async def _daily_question_job():
+            try:
+                from services.daily_question import run_daily_question_scheduler
+                with ApiClient(configuration) as api_client:
+                    _api = MessagingApi(api_client)
+                    await run_daily_question_scheduler(_api)
+            except Exception as e:
+                print(f"[DailyQ Scheduler] Error: {e}")
+
+        scheduler.add_job(_daily_question_job, "cron", minute="*")
+
+        # P2-B LINE 週報 LINE 推播：每週一凌晨 3:05（週報生成完後）
+        async def _weekly_line_push_job():
+            try:
+                from services.line_weekly_push import push_weekly_reports_to_line
+                with ApiClient(configuration) as api_client:
+                    _api = MessagingApi(api_client)
+                    await push_weekly_reports_to_line(_api)
+            except Exception as e:
+                print(f"[WeeklyPush] Error: {e}")
+
+        scheduler.add_job(_weekly_line_push_job, "cron",
+                          day_of_week="sun", hour=19, minute=5)
+
         scheduler.start()
-        print("[Startup] Weekly scheduler started")
+        print("[Startup] Scheduler started (weekly + daily question + weekly push)")
     except Exception as e:
         print(f"[Startup] Scheduler skipped: {e}")
 
@@ -260,6 +288,57 @@ async def sync_conversations(user_id: str = Depends(get_current_user)):
     except Exception:
         messages = []
     return JSONResponse({"messages": messages, "count": len(messages)})
+
+
+@app.get("/api/emotion-calendar")
+async def emotion_calendar(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    user_id: str = Depends(get_current_user),
+):
+    """取得情緒月曆資料（P2-A）"""
+    from datetime import date as _date
+    today = _date.today()
+    y = year or today.year
+    m = month or today.month
+    try:
+        from services.db_persistent import get_emotion_calendar, get_streak_days
+        records = await get_emotion_calendar(user_id, y, m)
+        streak = await get_streak_days(user_id)
+        return JSONResponse({
+            "year": y, "month": m,
+            "records": records,
+            "streak": streak,
+        })
+    except Exception as e:
+        return JSONResponse({"records": [], "streak": 0, "error": str(e)})
+
+
+@app.post("/api/push-schedule")
+async def set_push_schedule_api(
+    request: Request,
+    user_id: str = Depends(get_current_user),
+):
+    """設定今日一問推播時間（P0-A）"""
+    body = await request.json()
+    hour = int(body.get("hour", 21))
+    minute = int(body.get("minute", 0))
+    enabled = bool(body.get("enabled", True))
+    try:
+        from services.daily_question import set_push_schedule
+        from services.db_persistent import get_pool
+        await set_push_schedule(user_id, hour, minute)
+        if not enabled:
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        "UPDATE push_schedule SET enabled = 0 WHERE user_id = %s",
+                        (user_id,)
+                    )
+        return JSONResponse({"ok": True, "hour": hour, "minute": minute, "enabled": enabled})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
 @app.get("/api/sync/weekly")
