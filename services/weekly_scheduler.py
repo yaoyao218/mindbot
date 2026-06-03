@@ -3,18 +3,16 @@
 - 每週一凌晨 3 點執行（處理上週 Mon-Sun）
 - AI 生成摘要 + 情緒統計 + 主題
 - 組成 WeeklyReport → Redis 待領
-- 刪除 MariaDB 原始資料
+- 刪除 PostgreSQL 原始資料
 """
 import json, asyncio
 from datetime import datetime, date, timedelta
 from typing import Optional
 
-try:
-    import aiomysql
-except ImportError:
-    aiomysql = None
-
-from services.db_persistent import get_pool
+from services.db_persistent import (
+    get_users_in_range, get_messages_in_range,
+    get_psych_in_range, delete_messages_in_range, save_archive
+)
 from services.redis_client import put_weekly_report
 from services.llm import call_api
 
@@ -30,63 +28,6 @@ def get_last_week_range() -> tuple[date, date, str]:
     last_sun  = last_mon + timedelta(days=6)
     week_id   = get_week_id(last_mon)
     return last_mon, last_sun, week_id
-
-# ── DB 查詢 ───────────────────────────────────────────────
-async def get_users_in_range(start: date, end: date) -> list[str]:
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "SELECT DISTINCT user_id FROM session_messages "
-                "WHERE DATE(created_at) BETWEEN %s AND %s",
-                (start, end),
-            )
-            return [r[0] for r in await cur.fetchall()]
-
-async def get_messages_in_range(user_id: str, start: date, end: date) -> list[dict]:
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(
-                "SELECT role, content, created_at FROM session_messages "
-                "WHERE user_id=%s AND DATE(created_at) BETWEEN %s AND %s "
-                "ORDER BY created_at",
-                (user_id, start, end),
-            )
-            rows = await cur.fetchall()
-            # datetime → isoformat
-            for r in rows:
-                if isinstance(r.get("created_at"), datetime):
-                    r["created_at"] = r["created_at"].isoformat()
-            return rows
-
-async def get_psych_in_range(user_id: str, start: date, end: date) -> list[dict]:
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(
-                "SELECT arousal, emotion, cognition, created_at "
-                "FROM session_psych "
-                "WHERE user_id=%s AND DATE(created_at) BETWEEN %s AND %s "
-                "ORDER BY created_at",
-                (user_id, start, end),
-            )
-            rows = await cur.fetchall()
-            for r in rows:
-                if isinstance(r.get("created_at"), datetime):
-                    r["created_at"] = r["created_at"].isoformat()
-            return rows
-
-async def delete_messages_in_range(user_id: str, start: date, end: date) -> int:
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "DELETE FROM session_messages "
-                "WHERE user_id=%s AND DATE(created_at) BETWEEN %s AND %s",
-                (user_id, start, end),
-            )
-            return cur.rowcount
 
 # ── 統計運算（本地，不走 AI）─────────────────────────────
 def compute_stats(messages: list[dict], psych_rows: list[dict]) -> dict:
