@@ -340,14 +340,74 @@ async def llm_test():
 @app.get("/api/sync/conversations")
 async def sync_conversations(user_id: str = Depends(get_current_user)):
     """
-    拉取 Redis 對話緩衝區（原子 pop，不重複）
+    拉取對話緩衝區：優先 Redis，fallback 到 in-process buffer
     response: { messages: Message[], count: int }
     """
+    messages = []
+    # 嘗試 Redis
     try:
         from services.redis_client import pop_buffered_messages
         messages = await pop_buffered_messages(user_id)
     except Exception:
-        messages = []
+        pass
+
+    # Redis 無資料或未設定 → 用 in-process buffer
+    if not messages:
+        try:
+            from services import message_buffer
+            messages = message_buffer.get(user_id)
+        except Exception:
+            pass
+
+    return JSONResponse({"messages": messages, "count": len(messages)})
+
+
+@app.get("/api/conversations")
+async def get_conversations(
+    limit: int = 100,
+    user_id: str = Depends(get_current_user),
+):
+    """
+    取得用戶的完整對話紀錄（用於網站初次載入）
+    優先從 DB，fallback 到 in-process buffer
+    """
+    messages = []
+
+    # 嘗試 DB
+    try:
+        from datetime import date
+        from services.db_persistent import get_pool
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            import aiomysql
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(
+                    """
+                    SELECT role, content, created_at
+                    FROM session_messages
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (user_id, limit)
+                )
+                rows = await cur.fetchall()
+                for r in rows:
+                    if hasattr(r.get("created_at"), "isoformat"):
+                        r["created_at"] = r["created_at"].isoformat()
+                messages = list(reversed(rows))
+    except Exception:
+        pass
+
+    # Fallback: in-process buffer
+    if not messages:
+        try:
+            from services import message_buffer
+            msgs = message_buffer.get(user_id)
+            messages = msgs[-limit:]
+        except Exception:
+            pass
+
     return JSONResponse({"messages": messages, "count": len(messages)})
 
 

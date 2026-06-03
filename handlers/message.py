@@ -54,6 +54,12 @@ try:
     async def append_message(user_id, role, text):
         try:   await _dbp.append_message(user_id, role, text)
         except: pass
+        # 同步寫入 in-process 緩衝（不依賴 Redis/DB）
+        try:
+            from services import message_buffer
+            message_buffer.add(user_id, role, text)
+        except Exception:
+            pass
 
     async def count_today_referrals(user_id, rtype="routine"):
         try:   return await _dbp.count_today_referrals(user_id, rtype)
@@ -77,11 +83,16 @@ except ImportError:
     get_session = _mem_get_session
     save_session = _mem_save_session
     clear_session = _mem_clear_session
-    append_message = _noop
     count_today_referrals = _zero
     log_referral = _noop
     save_checkin = _noop
     async def get_unlocked_words(user_id): return set()
+    async def append_message(user_id, role, text):
+        try:
+            from services import message_buffer
+            message_buffer.add(user_id, role, text)
+        except Exception:
+            pass
     DB_MODE = "memory"
 
 

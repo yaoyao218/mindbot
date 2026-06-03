@@ -915,6 +915,29 @@ canvas { display: block; width: 100% !important; }
   color: var(--text-faint);
   margin-top: 4px;
 }
+
+/* ═══════════════════════════════════════════════
+   CHAT PAGE
+═══════════════════════════════════════════════ */
+.chat-msg {
+  display: flex; gap: 8px; margin-bottom: 14px; align-items: flex-end;
+}
+.chat-msg.user { flex-direction: row-reverse; }
+.chat-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0;
+}
+.chat-msg.user .chat-avatar { background: var(--bg-4); color: var(--text-soft); }
+.chat-msg.bot  .chat-avatar { background: rgba(74,124,89,.3); color: var(--green-lt); }
+.chat-bubble {
+  max-width: 72%; padding: 10px 14px; border-radius: 14px;
+  font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+}
+.chat-msg.user .chat-bubble { background: var(--green); color:#fff; border-bottom-right-radius:4px; }
+.chat-msg.bot  .chat-bubble { background: var(--bg-3); color:var(--text); border-bottom-left-radius:4px; }
+.chat-date-sep { text-align:center; font-size:11px; color:var(--text-faint); margin:16px 0 8px; }
+.chat-time { font-size:10px; color:var(--text-faint); align-self:flex-end; flex-shrink:0; padding-bottom:2px; }
 </style>
 </head>
 <body>
@@ -962,6 +985,9 @@ canvas { display: block; width: 100% !important; }
         </button>
 
         <div class="nav-section-label">帳號</div>
+        <button class="nav-item" onclick="goPage('chat')">
+          <span class="nav-icon">💬</span> 對話紀錄
+        </button>
         <button class="nav-item" onclick="goPage('calendar')">
           <span class="nav-icon">📅</span> 情緒月曆
         </button>
@@ -1232,6 +1258,25 @@ canvas { display: block; width: 100% !important; }
         </div>
       </div>
 
+
+      <!-- ══ PAGE: CHAT ════════════════════════════════════ -->
+      <div class="page" id="page-chat">
+        <div class="page-header">
+          <h1 class="page-title">對話紀錄</h1>
+          <p class="page-sub" id="chat-sub">載入中…</p>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div id="chat-log" style="
+            max-height:70vh; overflow-y:auto;
+            display:flex; flex-direction:column; gap:0;
+            padding: 16px;
+          ">
+            <div style="color:var(--text-faint);font-size:13px;text-align:center;padding:40px 0">
+              載入中…
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- ══ PAGE: CALENDAR ══════════════════════════════ -->
       <div class="page" id="page-calendar">
@@ -1584,7 +1629,8 @@ function goPage(page) {
 function pageLabel(p) {
   return {
     snapshot:'本週快照', weeks:'週報列表', trends:'情緒趨勢',
-    settings:'資料管理', calendar:'情緒月曆', milestones:'里程碑'
+    settings:'資料管理', calendar:'情緒月曆', milestones:'里程碑',
+    chat:'對話紀錄'
   }[p] || '';
 }
 
@@ -1606,6 +1652,7 @@ async function refreshCurrentPage() {
   if (currentPage === 'settings')   renderSettings();
   if (currentPage === 'calendar')   await renderCalendar();
   if (currentPage === 'milestones') await renderMilestones();
+  if (currentPage === 'chat')       await renderChat();
 }
 
 /* ═══════════════════════════════════════════════
@@ -2132,11 +2179,73 @@ async function renderMilestones() {
 }
 
 /* ═══════════════════════════════════════════════
+   CHAT PAGE
+═══════════════════════════════════════════════ */
+let _chatMessages = [];
+
+async function loadConversations() {
+  try {
+    const data = await apiFetch('/api/conversations?limit=200');
+    _chatMessages = data.messages || [];
+    if (currentPage === 'chat') renderChat();
+  } catch(e) {
+    console.warn('[chat] load failed', e);
+  }
+}
+
+async function renderChat() {
+  const log  = document.getElementById('chat-log');
+  const sub  = document.getElementById('chat-sub');
+  if (!log) return;
+
+  // 若還沒載入，先拉
+  if (!_chatMessages.length) {
+    await loadConversations();
+  }
+
+  const msgs = _chatMessages;
+  if (!msgs.length) {
+    log.innerHTML = '<div style="color:var(--text-faint);font-size:13px;text-align:center;padding:40px 0">還沒有對話紀錄<br><span style="font-size:11px">在 LINE 跟心事日記說說話，這裡就會出現紀錄</span></div>';
+    if (sub) sub.textContent = '尚無紀錄';
+    return;
+  }
+
+  if (sub) sub.textContent = `共 ${msgs.length} 則訊息`;
+
+  let lastDate = '';
+  const html = msgs.map(m => {
+    const role = m.role || 'user';
+    const text = escHtml(m.content || '');
+    const ts   = m.created_at || '';
+    const date = ts ? ts.slice(0, 10) : '';
+    const time = ts ? ts.slice(11, 16) : '';
+    const avatar = role === 'user' ? '🙂' : '🌙';
+
+    let sep = '';
+    if (date && date !== lastDate) {
+      sep = `<div class="chat-date-sep">${date}</div>`;
+      lastDate = date;
+    }
+
+    return `${sep}
+    <div class="chat-msg ${role}">
+      <div class="chat-avatar">${avatar}</div>
+      <div class="chat-bubble">${text}</div>
+      ${time ? `<div class="chat-time">${time}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  log.innerHTML = html;
+  // 捲到最下面
+  log.scrollTop = log.scrollHeight;
+}
+
+/* ═══════════════════════════════════════════════
    URL HASH ROUTING
 ═══════════════════════════════════════════════ */
 function handleHashRoute() {
   const hash = location.hash.replace('#', '');
-  const valid = ['snapshot','weeks','trends','settings','calendar','milestones'];
+  const valid = ['snapshot','weeks','trends','settings','calendar','milestones','chat'];
   if (valid.includes(hash)) goPage(hash);
 }
 
@@ -2263,6 +2372,7 @@ function patchText(wrapId, cls, newId, dflt) {
     showApp();
     handleHashRoute();            // URL hash → 正確頁面（從 LINE 連結進入）
     await renderSnapshot();       // 先顯示本地資料
+    await loadConversations();    // 載入對話紀錄
     await Sync.run(true);         // 再線上增量同步
   }
 
