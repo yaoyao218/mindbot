@@ -138,6 +138,98 @@ async def oauth_callback():
     return FileResponse("static/prototype.html")
 
 
+def _make_session_token(user_id: str, display_name: str) -> str:
+    """
+    產生 HMAC 簽名的 session token：
+    格式 base64(user_id:display_name:expires):signature
+    不需要 server-side storage
+    """
+    import time, json
+    expires = int(time.time()) + 86400 * 30   # 30 天
+    payload = f"{user_id}|{display_name}|{expires}"
+    sig = hmac.new(
+        CHANNEL_SECRET.encode(),
+        payload.encode(),
+        hashlib.sha256
+    ).hexdigest()[:16]
+    return base64.urlsafe_b64encode(
+        f"{payload}|{sig}".encode()
+    ).decode().rstrip("=")
+
+
+def _verify_session_token(token: str) -> Optional[str]:
+    """驗證 session token，回傳 user_id 或 None"""
+    import time
+    try:
+        padded = token + "=" * (4 - len(token) % 4)
+        decoded = base64.urlsafe_b64decode(padded).decode()
+        parts = decoded.split("|")
+        if len(parts) != 4:
+            return None
+        user_id, display_name, expires_str, sig = parts
+        if int(expires_str) < time.time():
+            return None
+        payload = f"{user_id}|{display_name}|{expires_str}"
+        expected_sig = hmac.new(
+            CHANNEL_SECRET.encode(),
+            payload.encode(),
+            hashlib.sha256
+        ).hexdigest()[:16]
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        return user_id
+    except Exception:
+        return None
+
+
+@app.get("/auto-login")
+async def auto_login(t: str = ""):
+    """
+    Bot 發送的一次性登入連結
+    ?t=TOKEN → 驗證 → 產生 session token → 導向 /app
+    """
+    from fastapi.responses import HTMLResponse
+    from services.login_token import consume_token
+
+    user_id = consume_token(t) if t else None
+    if not user_id:
+        return HTMLResponse(
+            '<html><head><meta charset="utf-8"></head>'
+            '<body style="font-family:sans-serif;text-align:center;padding:60px 20px">'
+            '<h2>🔗 連結已失效</h2>'
+            '<p style="color:#999;font-size:14px">請回到 LINE 重新傳送「登入」取得新連結</p>'
+            '</body></html>',
+            status_code=400
+        )
+
+    # 取得 LINE 用戶名稱
+    display_name = "用戶"
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(
+                f"https://api.line.me/v2/bot/profile/{user_id}",
+                headers={"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"},
+            )
+            if r.status_code == 200:
+                display_name = r.json().get("displayName", "用戶")
+    except Exception:
+        pass
+
+    session_token = _make_session_token(user_id, display_name)
+    name_enc = base64.urlsafe_b64encode(display_name.encode()).decode().rstrip("=")
+
+    return HTMLResponse(
+        f'<html><head><meta charset="utf-8">'
+        f'<script>'
+        f'localStorage.setItem("mb_token","{session_token}");'
+        f'localStorage.setItem("mb_user_id","{user_id}");'
+        f'localStorage.setItem("mb_name","{display_name}");'
+        f'location.replace("/app");'
+        f'</script>'
+        f'</head><body>登入中…</body></html>'
+    )
+
+
 @app.get("/calendar")
 async def serve_calendar():
     """情緒月曆入口（從 LINE 連結過來）→ 帶 hash 導向 SPA"""
@@ -206,19 +298,35 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
 # ── LINE Login 驗證（Bearer token → user_id）─────────────
 
 async def get_current_user(request: Request) -> str:
-    """用 LINE Access Token 驗證身份，回傳 user_id"""
+    """
+    驗證身份，回傳 user_id
+    接受兩種 token：
+      1. 我們自己簽發的 session token（/auto-login 流程）
+      2. LINE access token（LINE OAuth 流程）
+    """
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = auth[7:]
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(
-            "https://api.line.me/v2/profile",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-    if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return r.json()["userId"]
+
+    # 先嘗試我們自己的 session token（快，不需要外部請求）
+    user_id = _verify_session_token(token)
+    if user_id:
+        return user_id
+
+    # fallback：LINE access token 驗證
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                "https://api.line.me/v2/profile",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if r.status_code == 200:
+            return r.json()["userId"]
+    except Exception:
+        pass
+
+    raise HTTPException(status_code=401, detail="Invalid token")
 
 
 # ── LINE Login Callback ───────────────────────────────────

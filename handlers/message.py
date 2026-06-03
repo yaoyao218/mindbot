@@ -104,6 +104,7 @@ HELP_KEYWORDS     = ["說明", "help", "怎麼用", "功能"]
 STOP_KEYWORDS     = ["停止", "結束對話", "不想說了", "先這樣"]
 WEBSITE_KEYWORDS  = ["看紀錄", "我的記錄", "心情記錄", "情緒記錄", "查看日記",
                      "歷史紀錄", "心情日記", "報告", "週報", "統計"]
+LOGIN_KEYWORDS    = ["登入", "登入網站", "進入網站", "網站登入", "login"]
 PUSH_OFF_KEYWORDS = ["關閉推播", "取消推播", "不要推播", "停止推播"]
 
 APP_URL = "https://web-production-dd506.up.railway.app/app"
@@ -133,6 +134,10 @@ async def handle_message(event: MessageEvent, line_bot_api: MessagingApi):
 
     if any(kw in text for kw in WEBSITE_KEYWORDS):
         await send_website_link(reply_token, line_bot_api)
+        return
+
+    if any(kw in text.lower() for kw in LOGIN_KEYWORDS):
+        await send_login_link(user_id, reply_token, line_bot_api)
         return
 
     # ── 推播時間設定 ─────────────────────────────────────
@@ -380,6 +385,50 @@ def _website_flex() -> FlexMessage:
     return FlexMessage(
         alt_text="查看心情日記",
         contents=FlexContainer.from_dict(content)
+    )
+
+
+async def send_login_link(user_id: str, reply_token: str, line_bot_api: MessagingApi):
+    """產生一次性登入連結並傳給用戶"""
+    from services.login_token import create_token
+    token = create_token(user_id)
+    login_url = f"https://web-production-dd506.up.railway.app/auto-login?t={token}"
+
+    content = {
+        "type": "bubble",
+        "size": "kilo",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "paddingAll": "16px",
+            "contents": [
+                {"type": "text", "text": "心事日記 🌿",
+                 "weight": "bold", "color": "#1D9E75", "size": "sm"},
+                {"type": "text",
+                 "text": "點下方按鈕直接進入你的紀錄\n（連結 10 分鐘內有效）",
+                 "size": "xs", "color": "#888888", "margin": "sm", "wrap": True}
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{
+                "type": "button",
+                "action": {"type": "uri", "label": "進入我的心事日記", "uri": login_url},
+                "style": "primary", "color": "#1D9E75", "height": "sm"
+            }],
+            "paddingAll": "12px"
+        }
+    }
+    await line_bot_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[FlexMessage(
+                alt_text="點此進入心事日記",
+                contents=FlexContainer.from_dict(content)
+            )]
+        )
     )
 
 
