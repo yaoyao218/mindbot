@@ -9,7 +9,8 @@ tarot_projective.py — 塔羅投射模組
 import os
 from services.llm import call_api
 
-APP_URL = os.environ.get("APP_URL", "https://web-production-dd506.up.railway.app/app")
+LIFF_URL = "https://liff.line.me/2010279401-zI4pqH8D"
+APP_URL  = os.environ.get("APP_URL", LIFF_URL)
 
 # ══════════════════════════════════════════════════════════
 # 1. 覆蓋牌 Flex（翻牌前）
@@ -349,7 +350,7 @@ def build_closure_flex(
                     "action": {
                         "type": "uri",
                         "label": "查看今日情緒曲線",
-                        "uri": APP_URL,
+                        "uri": f"{LIFF_URL}#dashboard",
                     },
                     "style": "primary",
                     "color": "#4a7c59",

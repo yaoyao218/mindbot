@@ -8,7 +8,6 @@ from linebot.v3.messaging import (
     TextMessage, FlexMessage, FlexContainer
 )
 
-APP_URL  = "https://web-production-dd506.up.railway.app"
 LIFF_URL = "https://liff.line.me/2010279401-zI4pqH8D"
 
 # ── 色彩常數 ─────────────────────────────────────────────────
@@ -231,7 +230,7 @@ def _diary_detail_flex() -> FlexMessage:
                     "action": {
                         "type": "uri",
                         "label": "🌐 查看我的情緒月曆",
-                        "uri": f"{LIFF_URL}?target=calendar"
+                        "uri": f"{LIFF_URL}#calendar"
                     },
                     "style": "primary",
                     "color": _GREEN,

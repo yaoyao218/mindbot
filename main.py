@@ -128,8 +128,8 @@ async def health_check():
 
 @app.get("/app")
 async def serve_app():
-    """心事日記 Web App 主頁（舊版 prototype.html）"""
-    return FileResponse("static/prototype.html")
+    """心事日記 Web App 主頁 → 統一導向 v2 SPA（prototype.html 已廢棄）"""
+    return FileResponse("static/public/index.html")
 
 
 @app.get("/app-v2")
@@ -230,7 +230,7 @@ async def auto_login(t: str = ""):
         f'localStorage.setItem("mb_token","{session_token}");'
         f'localStorage.setItem("mb_user_id","{user_id}");'
         f'localStorage.setItem("mb_name","{display_name}");'
-        f'location.replace("/app");'
+        f'location.replace("/app-v2#dashboard");'
         f'</script>'
         f'</head><body>登入中…</body></html>'
     )
@@ -238,24 +238,24 @@ async def auto_login(t: str = ""):
 
 @app.get("/calendar")
 async def serve_calendar():
-    """情緒月曆入口（從 LINE 連結過來）→ 帶 hash 導向 SPA"""
+    """情緒月曆入口（從 LINE 連結過來）→ v2 SPA #calendar"""
     from fastapi.responses import HTMLResponse
     return HTMLResponse(
         '<html><head>'
-        '<meta http-equiv="refresh" content="0; url=/app#calendar">'
-        '<script>location.replace("/app#calendar")</script>'
+        '<meta http-equiv="refresh" content="0; url=/app-v2#calendar">'
+        '<script>location.replace("/app-v2#calendar")</script>'
         '</head></html>'
     )
 
 
 @app.get("/report")
 async def serve_report():
-    """週報入口（從 LINE 連結過來）→ 帶 hash 導向 SPA"""
+    """週報入口（從 LINE 連結過來）→ v2 SPA #weeks"""
     from fastapi.responses import HTMLResponse
     return HTMLResponse(
         '<html><head>'
-        '<meta http-equiv="refresh" content="0; url=/app#weeks">'
-        '<script>location.replace("/app#weeks")</script>'
+        '<meta http-equiv="refresh" content="0; url=/app-v2#weeks">'
+        '<script>location.replace("/app-v2#weeks")</script>'
         '</head></html>'
     )
 
