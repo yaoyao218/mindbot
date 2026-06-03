@@ -1,10 +1,21 @@
+# 環境變數 / 金鑰（絕對不能進 git）
 .env
 *.env
-金鑰.env.txt
+*.env.txt
+*.env.local
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 .venv/
 venv/
 *.log
+
+# 測試 / 快取
 sessions/
+.pytest_cache/
+
+# 簡報 / 文件（不需要版本控制）
+*.pptx
+*.html.bak

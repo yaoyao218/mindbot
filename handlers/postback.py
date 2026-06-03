@@ -249,7 +249,7 @@ async def handle_checkin_action(
         )
 
     elif choice == "record":
-        from services.db import save_checkin
+        from services.db_persistent import save_checkin
         import datetime as _dt
         pending = session.get("pending_checkin", {})
         await save_checkin(user_id, {
