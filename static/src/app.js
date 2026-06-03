@@ -48,9 +48,8 @@ class AppController {
     this._bindNav();
     this._bindGlobalCalendarDelegate();
 
-    this.showSkeleton();
-    await this.syncBackground();
     this.navigate(window.location.hash || '#dashboard');
+    this.syncBackground();
 
     window.addEventListener('hashchange', () => {
       this.navigate(window.location.hash);
@@ -384,16 +383,23 @@ class AppController {
   }
 
   _api(path, opts = {}) {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 8000); // 8s timeout
     return fetch(path, {
       ...opts,
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(this._token ? { Authorization: `Bearer ${this._token}` } : {}),
         ...opts.headers,
       },
     }).then(r => {
+      clearTimeout(tid);
       if (!r.ok) throw new Error(`${r.status} ${path}`);
       return r.json();
+    }).catch(e => {
+      clearTimeout(tid);
+      throw e;
     });
   }
 

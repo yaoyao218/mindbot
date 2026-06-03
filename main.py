@@ -366,9 +366,11 @@ async def line_callback(request: Request):
         if profile_r.status_code != 200:
             raise HTTPException(status_code=401, detail="LIFF token invalid")
         profile = profile_r.json()
-        # 簽發我們自己的 session token（讓後續 API 呼叫不需要一直打 LINE）
-        from services.login_token import create_token
-        our_token = create_token(profile["userId"])
+        # 簽發 HMAC session token（與 _verify_session_token 相容）
+        our_token = _make_session_token(
+            profile["userId"],
+            profile.get("displayName", ""),
+        )
         return JSONResponse({
             "token":   our_token,
             "user_id": profile["userId"],
