@@ -86,13 +86,17 @@ parser = WebhookParser(CHANNEL_SECRET)
 
 
 def verify_signature(body: bytes, signature: str) -> bool:
-    hash_val = hmac.new(
-        CHANNEL_SECRET.encode("utf-8"),
-        body,
-        hashlib.sha256
-    ).digest()
-    expected = base64.b64encode(hash_val).decode("utf-8")
-    return hmac.compare_digest(expected, signature)
+    """保留供外部呼叫，實際驗證由 parser.parse 處理"""
+    try:
+        hash_val = hmac.new(
+            CHANNEL_SECRET.encode("utf-8"),
+            body,
+            hashlib.sha256
+        ).digest()
+        expected = base64.b64encode(hash_val).decode("utf-8")
+        return hmac.compare_digest(expected, signature)
+    except Exception:
+        return False
 
 
 async def process_line_events(events: list) -> None:
@@ -173,16 +177,27 @@ async def get_config():
 
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
-    body = await request.body()
+    body      = await request.body()
     signature = request.headers.get("X-Line-Signature", "")
 
-    if not verify_signature(body, signature):
-        raise HTTPException(status_code=400, detail="Invalid signature")
+    # 診斷日誌（可在 Railway 的 Logs 看到）
+    secret_set = bool(CHANNEL_SECRET)
+    sig_len    = len(signature)
+    body_len   = len(body)
+    print(f"[Webhook] secret_set={secret_set} sig_len={sig_len} body_len={body_len}")
 
+    if not secret_set:
+        print("[Webhook] ERROR: LINE_CHANNEL_SECRET is not set!")
+        raise HTTPException(status_code=500, detail="Server configuration error")
+
+    # 用 LINE SDK 一次完成驗證 + 解析（避免雙重驗證衝突）
     try:
         events = parser.parse(body.decode("utf-8"), signature)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        err_msg = str(e)
+        print(f"[Webhook] Parse/verify error: {err_msg}")
+        # InvalidSignatureError → 400；其他解析錯誤也回 400
+        raise HTTPException(status_code=400, detail=err_msg)
 
     background_tasks.add_task(process_line_events, events)
     return JSONResponse(content={"status": "ok"})
@@ -260,10 +275,29 @@ async def health_detail():
         if not v: return "❌ 未設定"
         return f"✅ {v[:6]}…（長度 {len(v)}）"
 
-    from services.llm import _provider
+    try:
+        from services.llm import _provider
+        llm = _provider()
+    except Exception as e:
+        llm = f"error: {e}"
+
+    # 驗證 webhook 簽章是否可正常運作
+    test_body = b'{"destination":"test","events":[]}'
+    import hmac as _hmac, hashlib as _hashlib, base64 as _base64
+    try:
+        secret = CHANNEL_SECRET.encode("utf-8")
+        test_sig = _base64.b64encode(
+            _hmac.new(secret, test_body, _hashlib.sha256).digest()
+        ).decode("utf-8")
+        sig_ok = verify_signature(test_body, test_sig)
+    except Exception as e:
+        sig_ok = f"error: {e}"
+
     return JSONResponse({
         "server": "ok",
-        "llm_provider": _provider(),
+        "llm_provider": llm,
+        "webhook_signature_test": sig_ok,
+        "channel_secret_length": len(CHANNEL_SECRET),
         "env": {
             "LINE_CHANNEL_SECRET":       masked("LINE_CHANNEL_SECRET"),
             "LINE_CHANNEL_ACCESS_TOKEN": masked("LINE_CHANNEL_ACCESS_TOKEN"),
