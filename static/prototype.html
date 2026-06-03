@@ -1417,7 +1417,7 @@ const Auth = {
   },
   buildLineURL() {
     const state = crypto.randomUUID();
-    sessionStorage.setItem('oauth_state', state);
+    localStorage.setItem('oauth_state', state);
     return 'https://access.line.me/oauth2/v2.1/authorize?' + new URLSearchParams({
       response_type: 'code',
       client_id:     CFG.LINE_CLIENT_ID,
@@ -2147,7 +2147,7 @@ async function handleOAuthCallback() {
   const p    = new URLSearchParams(location.search);
   const code = p.get('code'), state = p.get('state');
   if (!code) return false;
-  if (state !== sessionStorage.getItem('oauth_state')) { showToast('登入狀態錯誤'); return false; }
+  if (state !== localStorage.getItem('oauth_state')) { showToast('登入狀態錯誤'); return false; }
   try {
     const { token, user_id, display_name } = await apiFetch('/api/auth/line_callback', {
       method: 'POST',
