@@ -1462,16 +1462,18 @@ const IDB = (() => {
    AUTH
 ═══════════════════════════════════════════════ */
 const Auth = {
-  getToken:  () => sessionStorage.getItem('mb_token'),
-  getUserId: () => sessionStorage.getItem('mb_uid'),
-  getName:   () => sessionStorage.getItem('mb_name') || '用戶',
+  // 改用 localStorage：關閉分頁後仍保持登入
+  getToken:  () => localStorage.getItem('mb_token'),
+  getUserId: () => localStorage.getItem('mb_user_id') || localStorage.getItem('mb_uid'),
+  getName:   () => localStorage.getItem('mb_name') || '用戶',
   set(token, uid, name) {
-    sessionStorage.setItem('mb_token', token);
-    sessionStorage.setItem('mb_uid',   uid);
-    sessionStorage.setItem('mb_name',  name || '用戶');
+    localStorage.setItem('mb_token',   token);
+    localStorage.setItem('mb_user_id', uid);
+    localStorage.setItem('mb_uid',     uid);   // 相容舊 key
+    localStorage.setItem('mb_name',    name || '用戶');
   },
   clear() {
-    ['mb_token','mb_uid','mb_name'].forEach(k => sessionStorage.removeItem(k));
+    ['mb_token','mb_user_id','mb_uid','mb_name'].forEach(k => localStorage.removeItem(k));
   },
   buildLineURL() {
     const state = crypto.randomUUID();
@@ -2439,29 +2441,41 @@ function patchText(wrapId, cls, newId, dflt) {
    INIT
 ═══════════════════════════════════════════════ */
 (async () => {
-  await loadConfig();           // 先從後端取得 LINE_CLIENT_ID
-  await IDB.open();
+  // ── 步驟 1：如果有 token，立刻顯示 App（不等 IDB）──
+  if (Auth.getToken()) {
+    showApp();
+  }
+
+  // ── 步驟 2：載入後端設定 ──────────────────────────────
+  try { await loadConfig(); } catch(e) { console.warn('[init] loadConfig failed:', e); }
+
+  // ── 步驟 3：開啟 IndexedDB（失敗不影響其他功能）──────
+  try { await IDB.open(); } catch(e) { console.warn('[init] IDB.open failed:', e); }
+
   initOffline();
 
-  // OAuth callback 要先處理，之後才設定登入按鈕
-  // （否則 buildLineURL 會覆蓋 localStorage 的 state）
+  // ── 步驟 4：處理 OAuth callback ─────────────────────
   const wasCallback = await handleOAuthCallback();
 
-  // 非 callback 頁面才設登入連結
-  if (!wasCallback) {
+  // ── 步驟 5：設定登入按鈕 ────────────────────────────
+  if (!wasCallback && !Auth.getToken()) {
     const loginBtn = document.getElementById('line-login-btn');
     if (loginBtn) loginBtn.href = Auth.buildLineURL();
   }
 
+  // ── 步驟 6：顯示 App（還沒顯示的話）────────────────
   if (Auth.getToken() || wasCallback) {
-    showApp();
-    handleHashRoute();            // URL hash → 正確頁面（從 LINE 連結進入）
-    await renderSnapshot();       // 先顯示本地資料
-    await loadConversations();    // 載入對話紀錄
-    await Sync.run(true);         // 再線上增量同步
+    if (!document.getElementById('app-screen') ||
+        document.getElementById('app-screen').style.display === 'none') {
+      showApp();
+    }
+    handleHashRoute();
+    try { await renderSnapshot(); }    catch(e) { console.warn('[init] renderSnapshot:', e); }
+    try { await loadConversations(); } catch(e) { console.warn('[init] loadConv:', e); }
+    try { await Sync.run(true); }      catch(e) { console.warn('[init] sync:', e); }
   }
 
-  // 支援瀏覽器上下頁切換
+  // ── 支援瀏覽器上下頁切換 ────────────────────────────
   window.addEventListener('hashchange', () => {
     if (Auth.getToken()) handleHashRoute();
   });
