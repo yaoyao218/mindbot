@@ -219,25 +219,17 @@ class AppController {
 
   /* ── Timeline ────────────────────────────────── */
   async _loadTimeline(container) {
-    const keepLocal = await getSetting('keep_local_history', false);
-    if (!keepLocal) {
-      container.innerHTML = `
-        <div class="flex flex-col items-center justify-center py-16 text-center px-6">
-          <span class="text-4xl mb-4">🔒</span>
-          <p class="text-slate-400 text-sm">本地日記備份未開啟</p>
-          <p class="text-slate-600 text-xs mt-2 leading-relaxed">
-            在「設定」頁面開啟後，<br>未來的對話將保存在本裝置中
-          </p>
-          <button onclick="window.MindBotApp.navigate('#settings')"
-                  class="mt-5 px-5 py-2 rounded-xl bg-indigo-950/60 border border-indigo-500/20
-                         text-indigo-300 text-xs font-medium active:scale-95 transition">
-            前往設定
-          </button>
-        </div>`;
-      return;
+    // 取得 snapshot 資料，供右側 PsychBubble 使用
+    let snapData = null;
+    try {
+      snapData = await this._api('/api/snapshot');
+    } catch {
+      try {
+        const local = await db.archives.orderBy('id').last();
+        if (local) snapData = local;
+      } catch { /* IndexedDB 也失敗則 snapData 保持 null */ }
     }
-    const messages = await db.conversations.orderBy('timestamp').toArray();
-    renderTimeline(container, messages);
+    renderTimeline(container, snapData);
   }
 
   /* ── Settings ────────────────────────────────── */
