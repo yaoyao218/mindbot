@@ -112,17 +112,20 @@ async function _mountWaveChart(container, records) {
   try {
     const { WaveChart } = await import('./wave_chart.js');
 
-    // emotion_calendar records → WaveChart 格式（date 欄位名稱對齊）
+    // ── 競態守衛：await 期間用戶可能已切換路由或月份 ──
+    // isConnected 為 false 代表 wrap 已被 innerHTML 清除，直接放棄
+    if (!wrap.isConnected) return;
+
     const waveRecords = records.map(r => ({
       date:          r.record_date,
-      emotion_emoji: r.emotion_emoji  || '',
-      arousal_level: r.arousal_level  ?? undefined,
+      emotion_emoji: r.emotion_emoji || '',
+      arousal_level: r.arousal_level ?? undefined,
     }));
 
     window._mbWaveChart = new WaveChart(wrap, { records: waveRecords });
   } catch (e) {
     console.warn('[CalendarView] WaveChart 載入失敗:', e);
-    wrap.innerHTML = '';   // 靜默降級，不顯示錯誤
+    wrap.innerHTML = '';
   }
 }
 

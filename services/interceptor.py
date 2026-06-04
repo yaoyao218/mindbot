@@ -50,13 +50,18 @@ def truncate_to_first_question(text: str) -> str:
 
 def fuse_all_questions(text: str) -> str:
     """
-    問句硬熔斷：將文字中所有問號改為句號，並移除末尾殘留的問句結構。
-    觸發條件：EXTERNALIZATION 或 RUPTURE 狀態，LLM 若仍輸出問句則強制拔除。
+    問句硬熔斷：將文字中所有問號改為句號，並清除中文疑問助詞殘留。
+    觸發條件：EXTERNALIZATION 或 RUPTURE 狀態。
+
+    處理順序：
+    1. 移除問號前緊接的疑問助詞（嗎/呢/吧/啊），避免「嗎。」殘留
+    2. 問號 → 句號
+    3. 合併連續句號
     """
-    # 將全形/半形問號全部改為句號
-    result = text.replace("？", "。").replace("?", ".")
-    # 收尾若有多餘句號疊加，合併為一個
-    result = re.sub(r"[。\.]{2,}", "。", result)
+    # Step 1: 問號前的疑問助詞一起移除（「嗎？」→「。」，「呢？」→「。」）
+    result = re.sub(r'[嗎呢吧啊]{0,2}[？?]', '。', text)
+    # Step 2: 合併連續句號/英文句點
+    result = re.sub(r'[。\.]{2,}', '。', result)
     return result.strip()
 
 

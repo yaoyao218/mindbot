@@ -381,16 +381,22 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     )
 
     # ── Nudge Pipeline ────────────────────────────────────
+    # Rupture Repair 冷卻期（rupture_repair_cooldown > 0）：
+    # A/B/D/E/F 全面短路，不疊加任何追加氣泡，保護修復氛圍。
+    # C（收尾訊號）仍正常執行。
+    _nudge_ok = session.get("psych", {}).get("rupture_repair_cooldown", 0) == 0
 
     # A. Streak 更新
-    session, streak_msg = update_streak(session)
-    if streak_msg:
-        reply_text = reply_text.rstrip() + "\n\n" + streak_msg
+    if _nudge_ok:
+        session, streak_msg = update_streak(session)
+        if streak_msg:
+            reply_text = reply_text.rstrip() + "\n\n" + streak_msg
 
     # B. 週任務完成偵測
-    task_msg = detect_task_completion(text, session)
-    if task_msg:
-        reply_text = reply_text.rstrip() + "\n\n" + task_msg
+    if _nudge_ok:
+        task_msg = detect_task_completion(text, session)
+        if task_msg:
+            reply_text = reply_text.rstrip() + "\n\n" + task_msg
 
     # C. 對話結尾感 + 象徵系統
     closing_triggered = should_show_closing(session, 2)  # companion 不做 arousal 判斷
@@ -487,27 +493,29 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
         reply_text = reply_text.rstrip() + "\n\n" + get_closing_prompt(session)
 
     # D. 成長樹（每 5 輪 +1 sun）
-    if total_turn > 0 and total_turn % 5 == 0:
+    if _nudge_ok and total_turn > 0 and total_turn % 5 == 0:
         session, tree_msg = update_tree(session, "dialog_5turn")
         if tree_msg:
             reply_text = reply_text.rstrip() + "\n\n" + tree_msg
 
     # E. 情緒詞典解鎖
-    try:
-        unlocked = await get_unlocked_words(user_id)
-        word_unlock_msg = await scan_emotion_keywords(text, user_id, unlocked)
-        if word_unlock_msg:
-            reply_text = reply_text.rstrip() + "\n\n" + word_unlock_msg
-    except Exception:
-        pass
+    if _nudge_ok:
+        try:
+            unlocked = await get_unlocked_words(user_id)
+            word_unlock_msg = await scan_emotion_keywords(text, user_id, unlocked)
+            if word_unlock_msg:
+                reply_text = reply_text.rstrip() + "\n\n" + word_unlock_msg
+        except Exception:
+            pass
 
     # F. P1-A 里程碑回饋
-    try:
-        milestone_msg = await check_milestone(user_id)
-        if milestone_msg:
-            reply_text = reply_text.rstrip() + "\n\n" + milestone_msg
-    except Exception:
-        pass
+    if _nudge_ok:
+        try:
+            milestone_msg = await check_milestone(user_id)
+            if milestone_msg:
+                reply_text = reply_text.rstrip() + "\n\n" + milestone_msg
+        except Exception:
+            pass
 
     # 危機冷卻計數器遞減（每輪 -1，歸零後不再注入脈絡）
     cooldown = session.get("psych", {}).get("crisis_cooldown_turns", 0)

@@ -180,7 +180,7 @@ export class WaveChart {
     const intensities = this._extractIntensities();
 
     const tick = () => {
-      if (!this._mounted) return;
+      if (!this._mounted) return;   // destroy() 後最後一幀安全退出
       this._phase += 0.007;
 
       // 背景波：慢、振幅大、無資料偏移
@@ -272,13 +272,18 @@ export class WaveChart {
     this._renderDots();
   }
 
-  /** 銷毀動畫（離開頁面時呼叫，避免記憶體洩漏） */
+  /** 銷毀動畫、觸發 GC（離開頁面時呼叫） */
   destroy() {
     this._mounted = false;
     if (this._raf) {
       cancelAnimationFrame(this._raf);
       this._raf = null;
     }
+    // 取得 SVG 內的 canvas（若存在）並釋放 GPU 佔用
+    const svgEl = this.container?.querySelector('svg');
+    if (svgEl) svgEl.remove();
+    if (this.container) this.container.innerHTML = '';
+    this.records = [];
   }
 
   /**

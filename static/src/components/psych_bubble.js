@@ -144,7 +144,9 @@ export class PsychBubble {
 
   // ── rAF 主循環 ────────────────────────────────────────
   _startLoop() {
+    this._alive = true;   // destroy() 後 tick 不再重排
     const tick = () => {
+      if (!this._alive) return;   // 守衛：destroy 後的最後一幀安全退出
       this._physics();
       this._render();
       this._raf = requestAnimationFrame(tick);
@@ -276,13 +278,20 @@ export class PsychBubble {
     }, 220);
   }
 
-  /** 銷毀動畫與事件監聽 */
+  /** 銷毀動畫、事件監聽並觸發 GC */
   destroy() {
+    this._alive = false;
     if (this._raf) {
       cancelAnimationFrame(this._raf);
       this._raf = null;
     }
     window.removeEventListener('resize', this._resizeHandler);
+    // canvas.width = 0 解除 GPU 紋理佔用，提示瀏覽器 GC
+    if (this.canvas) {
+      this.canvas.width  = 0;
+      this.canvas.height = 0;
+    }
+    this.bubbles = [];
   }
 }
 

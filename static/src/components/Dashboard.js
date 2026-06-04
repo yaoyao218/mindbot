@@ -263,8 +263,14 @@ async function renderArchaeologyCard(mount, data) {
   if (hasTriad) {
     try {
       const { PsychBubble } = await import('./psych_bubble.js');
+
+      // ── 競態守衛：await 期間用戶可能已切換路由 ──
+      if (!mount.isConnected) return;
+
       const canvas = mount.querySelector('.arch-bubble-wrap canvas');
       if (canvas) {
+        // 再次銷毀任何在 await 期間被建立的孤兒實例
+        window._mbPsychBubble?.destroy();
         window._mbPsychBubble = new PsychBubble(canvas, triad);
       }
     } catch (e) {

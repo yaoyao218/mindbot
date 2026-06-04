@@ -590,81 +590,130 @@ async def get_snapshot(user_id: str = Depends(get_current_user)):
     """
     from datetime import date as _date, timedelta
     from services.weekly_scheduler import (
-        get_week_id, compute_stats, generate_weekly_summary
+        get_week_id, compute_stats, generate_archaeology_report,
     )
     from services.db_persistent import (
-        get_messages_in_range, get_psych_in_range, get_pool, get_emotion_calendar
+        get_messages_in_range, get_psych_in_range, get_pool, get_emotion_calendar,
+        save_archive,
     )
 
-    today    = _date.today()
-    mon      = today - timedelta(days=today.weekday())   # 本週一
-    sun      = mon + timedelta(days=6)                   # 本週日
-    week_id  = get_week_id(mon)
+    today   = _date.today()
+    mon     = today - timedelta(days=today.weekday())
+    sun     = mon + timedelta(days=6)
+    week_id = get_week_id(mon)
+
+    # 空結構：互動不足 / AI 失敗時的安全預設值
+    _empty_arch  = {"surface": "", "middle": "", "deep": ""}
+    _empty_triad = {"emotion": [], "cognition": [], "need": []}
+    _empty_arc   = {"opening": "", "development": "", "turning": "", "closing": ""}
 
     try:
-        # 查詢到今天為止的資料（週日前持續累積）
         messages   = await get_messages_in_range(user_id, mon, today)
         psych_rows = await get_psych_in_range(user_id, mon, today)
 
         if not messages:
             return JSONResponse({
-                "empty":   True,
-                "week_id": week_id,
-                "start":   mon.isoformat(),
-                "end":     sun.isoformat(),
+                "empty":           True,
+                "week_id":         week_id,
+                "start":           mon.isoformat(),
+                "end":             sun.isoformat(),
                 "is_current_week": True,
             })
 
+        # ── 本地統計 ─────────────────────────────────────────
         stats = compute_stats(messages, psych_rows)
 
-        # AI 摘要（快取到 archives，避免每次都呼叫）
+        # past_baseline：移動平均平滑化，Dashboard.js 折線圖基準線用
+        _arousals = [p["v"] for p in stats["arousal_curve"]]
+        if len(_arousals) >= 3:
+            _win = max(2, len(_arousals) // 4)
+            stats["past_baseline"] = [
+                {"t": stats["arousal_curve"][i]["t"],
+                 "v": round(sum(_arousals[max(0, i - _win):i + 1])
+                            / (i - max(0, i - _win) + 1), 2)}
+                for i in range(len(_arousals))
+            ]
+        else:
+            stats["past_baseline"] = None
+
+        # ── AI 情感考古（6h 快取，避免每次呼叫 LLM）───────────
         pool = await get_pool()
+        import time as _time
+        now_ts      = _time.time()
+        SUMMARY_TTL = 6 * 3600
+
+        summary = ""; themes = []; growth_note = ""
+        archaeology   = dict(_empty_arch)
+        triad         = dict(_empty_triad)
+        narrative_arc = dict(_empty_arc)
+        cache_ok      = False
+
         async with pool.acquire() as conn:
             cached = await conn.fetchrow(
                 "SELECT summary, stats FROM archives WHERE user_id=$1 AND year_month=$2",
                 user_id, week_id
             )
 
-        import time as _time
-        now_ts = _time.time()
-
-        # 快取邏輯：6 小時內不重算，讓摘要每天能反映最新狀態
-        SUMMARY_TTL = 6 * 3600
-        cache_ok = False
         if cached and cached["summary"]:
             cs = dict(cached["stats"]) if cached["stats"] else {}
-            cached_at = cs.get("summary_cached_at", 0)
-            if now_ts - float(cached_at) < SUMMARY_TTL:
-                summary     = cached["summary"]
-                themes      = cs.get("themes", [])
-                growth_note = cs.get("growth_note", "")
-                cache_ok    = True
+            try:
+                if now_ts - float(cs.get("summary_cached_at", 0)) < SUMMARY_TTL:
+                    summary       = cached["summary"]
+                    themes        = cs.get("themes", [])
+                    growth_note   = cs.get("growth_note", "")
+                    archaeology   = cs.get("archaeology",   _empty_arch)
+                    triad         = cs.get("triad",         _empty_triad)
+                    narrative_arc = cs.get("narrative_arc", _empty_arc)
+                    cache_ok      = True
+            except (ValueError, TypeError):
+                pass
 
         if not cache_ok:
+            user_msgs = [m for m in messages if m["role"] == "user"]
+
+            if len(user_msgs) < 3:
+                # 靜態溫和降級：互動過少，跳過 LLM，嚴禁崩潰
+                summary = "本週對話才剛開始，繼續傾訴後這裡會出現你的情緒輪廓。"
+            else:
+                try:
+                    arch_result   = await generate_archaeology_report(
+                        messages, psych_rows, week_id
+                    )
+                    summary       = arch_result.get("summary",       "")
+                    themes        = arch_result.get("themes",        [])
+                    growth_note   = arch_result.get("growth_note",   "")
+                    archaeology   = arch_result.get("archaeology",   _empty_arch)
+                    triad         = arch_result.get("triad",         _empty_triad)
+                    narrative_arc = arch_result.get("narrative_arc", _empty_arc)
+                except Exception as e:
+                    print(f"[snapshot] archaeology AI failed: {e}")
+                    summary = ""
+
+            # 寫入快取（含全新欄位）
             try:
-                summary, themes, growth_note = await generate_weekly_summary(
-                    messages, week_id
-                )
-                from services.db_persistent import save_archive
                 await save_archive(
                     user_id, week_id, summary,
-                    stats={**stats, "themes": themes, "growth_note": growth_note,
-                           "start": mon.isoformat(), "end": sun.isoformat(),
+                    stats={**stats,
+                           "themes": themes, "growth_note": growth_note,
+                           "archaeology":   archaeology,
+                           "triad":         triad,
+                           "narrative_arc": narrative_arc,
+                           "start":  mon.isoformat(), "end": sun.isoformat(),
                            "summary_cached_at": str(now_ts)},
                     raw_count=len(messages),
                 )
             except Exception as e:
-                print(f"[snapshot] AI summary failed: {e}")
-                summary = ""; themes = []; growth_note = ""
+                print(f"[snapshot] save_archive failed: {e}")
 
-        # 本週代表牌：從 emotion_calendar 取最新有塔羅的記錄
+        # ── 本週代表牌 + psych_context ──────────────────────
         week_tarot     = None
         week_end_quote = None
         psych_context  = {}
         try:
-            cal_recs = await get_emotion_calendar(user_id, mon.year, mon.month)
+            cal_recs  = await get_emotion_calendar(user_id, mon.year, mon.month)
             week_days = {(mon + timedelta(days=i)).isoformat() for i in range(7)}
-            tarot_recs = [r for r in cal_recs if r.get("tarot_card") and r["record_date"] in week_days]
+            tarot_recs = [r for r in cal_recs
+                          if r.get("tarot_card") and r["record_date"] in week_days]
             if tarot_recs:
                 latest = sorted(tarot_recs, key=lambda x: x["record_date"])[-1]
                 week_tarot = {
@@ -673,7 +722,6 @@ async def get_snapshot(user_id: str = Depends(get_current_user)):
                     "reversed": latest.get("tarot_reversed", False),
                 }
 
-            # 最近一筆含 psych_context 的收尾記錄（本週內）
             async with pool.acquire() as conn:
                 pc_row = await conn.fetchrow(
                     """SELECT end_quote, dialogue_insight, quote_author, tarot_card
@@ -711,6 +759,9 @@ async def get_snapshot(user_id: str = Depends(get_current_user)):
             "summary":         summary,
             "themes":          themes,
             "growth_note":     growth_note,
+            "archaeology":     archaeology,
+            "triad":           triad,
+            "narrative_arc":   narrative_arc,
             "stats":           stats,
             "raw_count":       len([m for m in messages if m["role"] == "user"]),
             "empty":           False,
