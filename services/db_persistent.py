@@ -175,6 +175,21 @@ CREATE TABLE IF NOT EXISTS milestone_log (
     triggered_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
     UNIQUE (user_id, milestone_days)
 );
+
+CREATE TABLE IF NOT EXISTS psych_insights (
+    id               SERIAL       PRIMARY KEY,
+    user_id          VARCHAR(64)  NOT NULL,
+    trigger_turn     INT          NOT NULL DEFAULT 0,
+    dialogue_insight TEXT         NOT NULL DEFAULT '',
+    dominant_emotion VARCHAR(32)  NOT NULL DEFAULT '',
+    quote_author     VARCHAR(64),
+    end_quote        TEXT,
+    tarot_card_name  VARCHAR(64)  NOT NULL DEFAULT '',
+    tarot_orientation VARCHAR(10) NOT NULL DEFAULT 'UPRIGHT',
+    tarot_insight    TEXT         NOT NULL DEFAULT '',
+    created_at       TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pi_user ON psych_insights (user_id, created_at DESC);
 """
 
 # 舊資料庫欄位補齊（冪等）
@@ -745,6 +760,57 @@ async def get_users_in_range(start: date, end: date) -> list[str]:
             start, end
         )
         return [r["user_id"] for r in rows]
+
+
+# ── Psych Insights（收尾洞察封存）────────────────────────
+
+async def save_psych_insight(user_id: str, data: dict) -> int:
+    """儲存一次對話收尾的完整洞察，回傳自增 ID（供翻牌 Postback 查詢）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO psych_insights
+                (user_id, trigger_turn, dialogue_insight, dominant_emotion,
+                 quote_author, end_quote, tarot_card_name, tarot_orientation, tarot_insight)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            RETURNING id
+            """,
+            user_id,
+            data.get("trigger_turn", 0),
+            data.get("dialogue_insight", ""),
+            data.get("dominant_emotion", ""),
+            data.get("quote_author"),
+            data.get("end_quote"),
+            data.get("tarot_card_name", ""),
+            data.get("tarot_orientation", "UPRIGHT"),
+            data.get("tarot_insight", ""),
+        )
+        return row["id"]
+
+
+async def get_psych_insight(insight_id: int, user_id: str) -> dict:
+    """查詢單筆洞察（驗證 user_id 防止越權存取），找不到回傳空 dict"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM psych_insights WHERE id=$1 AND user_id=$2",
+            insight_id, user_id,
+        )
+    if not row:
+        return {}
+    return {
+        "id":               row["id"],
+        "user_id":          row["user_id"],
+        "trigger_turn":     row["trigger_turn"],
+        "dialogue_insight": row["dialogue_insight"],
+        "dominant_emotion": row["dominant_emotion"],
+        "quote_author":     row["quote_author"],
+        "end_quote":        row["end_quote"],
+        "tarot_card_name":  row["tarot_card_name"],
+        "tarot_orientation":row["tarot_orientation"],
+        "tarot_insight":    row["tarot_insight"],
+    }
 
 
 async def get_messages_in_range(user_id: str, start: date, end: date) -> list[dict]:

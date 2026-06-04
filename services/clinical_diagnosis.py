@@ -51,6 +51,37 @@ class DiagnosisResult:
         return None
 
 
+_DIAGNOSE_SYSTEM = """# Role
+你是一位資深的臨床心理諮商師與文本分析專家。你的任務是分析用戶最新的一則訊息，並嚴格依據以下心理學指標進行客觀評估，輸出 JSON 格式。只輸出 JSON，不要任何前言或解釋。
+
+# Evaluation Metric Guidelines
+
+1. Arousal Level（情緒喚起強度：1-5）：
+   - 1（極低）：情感平淡、麻木、抽離、機械式回應。
+   - 2（低）：輕微情感波動，能平靜敘述，基本不帶張力。
+   - 3（中等）：正常的情緒表達，有起伏但可控，在容納之窗內。
+   - 4（高）：情緒強烈、思考受干擾，接近容納之窗邊緣。
+   - 5（極高）：情緒極度激昂、恐慌、狂喜、極度憤怒或崩潰邊緣。
+
+2. Defense Mechanism（防衛機制識別）：
+   - INTELLECTUALIZATION（理智化）：邏輯過度清晰，用冰冷的專有名詞、大道理分析自己的痛苦，迴避真實情感。例：「這只是我多巴胺分泌失調的客觀現象」。
+   - EXTERNALIZATION（外在化）：將所有痛苦與衝突歸咎於環境、他人或運氣，自身毫無反思。例：「都是這破公司和垃圾主管害的」。
+   - NONE：坦然面對、直接表達核心脆弱或感受，或明顯有以上兩種混合使用。
+
+3. Alliance Rupture（同盟破裂偵測）：
+   - CONFRONTATION（對抗）：用戶對 AI 的回應表示不滿、反駁、諷刺或攻擊。例：「你根本不懂」、「少跟我講這種機器人話」。
+   - WITHDRAWAL（抽離）：用戶受到傷害或感到失望後，開始敷衍、拒絕深入對話。例：「算了」、「隨便，你說是就是吧」。
+   - NONE：互動良好，願意信任並深化對話。
+
+# Output Format（JSON Only）
+{
+  "arousal_level": 1到5的整數,
+  "defense_mechanism": "INTELLECTUALIZATION" | "EXTERNALIZATION" | "NONE",
+  "alliance_rupture": "CONFRONTATION" | "WITHDRAWAL" | "NONE",
+  "notes": "簡短說明評估依據（20字以內）"
+}"""
+
+
 async def diagnose(
     user_text: str,
     history: list[dict],
@@ -63,38 +94,23 @@ async def diagnose(
 
     history_text = "\n".join([
         f"{'用戶' if h['role'] == 'user' else 'Bot'}: {h['text']}"
-        for h in history[-6:]  # 只取最近 6 輪
+        for h in history[-6:]
     ])
 
-    prompt = f"""你是受過訓練的心理健康對話評估系統。
-根據以下對話，評估用戶當前狀態。只回傳 JSON，不要其他文字。
-
-對話記錄（最近幾輪）：
+    prompt = f"""對話記錄（最近幾輪）：
 {history_text}
 
 用戶最新訊息：「{user_text}」
 
-回傳格式：
-{{
-  "arousal_level": 1到5的整數,
-  "defense_mechanism": "INTELLECTUALIZATION|EXTERNALIZATION|NONE",
-  "alliance_rupture": "CONFRONTATION|WITHDRAWAL|NONE",
-  "notes": "簡短說明評估依據"
-}}
-
-評估標準：
-- arousal_level 1：過低喚起（解離、麻木、沒感覺）
-- arousal_level 2-3：容納之窗內（能溝通、有情緒但穩定）
-- arousal_level 4：臨界過度喚起（情緒強烈、難以思考）
-- arousal_level 5：全面崩潰（恐慌、解離、危機狀態）
-
-- INTELLECTUALIZATION：用道理/分析逃避情緒（「我知道這是認知扭曲但我就是...」）
-- EXTERNALIZATION：把問題全歸因於他人（「都是因為他/她/他們」）
-- CONFRONTATION：直接挑戰Bot（「你不懂我」「這問題很蠢」）
-- WITHDRAWAL：沉默、很短的回覆、失去投入感"""
+請依評估標準輸出 JSON。"""
 
     try:
-        raw = await call_api(prompt, max_tokens=300, tier="haiku")
+        raw = await call_api(
+            prompt,
+            system=_DIAGNOSE_SYSTEM,
+            max_tokens=200,
+            tier="haiku",
+        )
         raw = raw.replace("```json", "").replace("```", "").strip()
         parsed = json.loads(raw)
         arousal = int(parsed.get("arousal_level", 3))

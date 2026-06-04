@@ -21,7 +21,7 @@ CONV_TTL    = 86400        # 24 小時
 ARCHIVE_TTL = 86400 * 30   # 30 天
 WEEKLY_TTL  = 86400 * 30   # 30 天（改短：PostgreSQL 是 SSOT，快取只是加速）
 SYNC_TTL    = 86400 * 180  # 180 天
-LOCK_TTL    = 30           # 分散式鎖 30 秒（防 AI 掛掉永久鎖定）
+LOCK_TTL    = 15           # 分散式鎖 15 秒（LLM 最長生成容忍值；縮短以降低死鎖窗口）
 
 
 def _get_pool() -> redis.ConnectionPool:

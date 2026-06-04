@@ -62,6 +62,8 @@ async def handle_postback(event: PostbackEvent, line_bot_api: MessagingApi):
         await handle_checkin_action(user_id, reply_token, params, line_bot_api)
     elif action == "tarot_flip":
         await handle_tarot_flip(user_id, reply_token, line_bot_api)
+    elif action == "flip_tarot":
+        await handle_flip_tarot(user_id, reply_token, params, line_bot_api)
     elif action == "onboard":
         await handle_onboard(user_id, reply_token, params, line_bot_api)
     elif action == "set_context":
@@ -341,6 +343,72 @@ async def handle_tarot_flip(
                 )]
             )
         )
+
+
+async def handle_flip_tarot(
+    user_id: str,
+    reply_token: str,
+    params: dict,
+    line_bot_api: MessagingApi,
+):
+    """
+    收尾字卡的翻牌 Postback（action=flip_tarot&insight_id=N）。
+    查詢 psych_insights 取得塔羅資訊，回傳揭示卡片並關閉對話。
+    與 handle_tarot_flip（STAGNANT 翻牌）互相獨立。
+    """
+    raw_id = params.get("insight_id", "0")
+    try:
+        insight_id = int(raw_id)
+    except (ValueError, TypeError):
+        insight_id = 0
+
+    if not insight_id:
+        await line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=reply_token,
+                messages=[TextMessage(text="這張牌已經翻過了，隨時想聊都可以。")]
+            )
+        )
+        return
+
+    try:
+        from services.db_persistent import get_psych_insight
+        insight = await get_psych_insight(insight_id, user_id)
+    except Exception as e:
+        print(f"[flip_tarot] DB error: {e}")
+        insight = {}
+
+    if not insight:
+        await line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=reply_token,
+                messages=[TextMessage(text="找不到這張牌的資料，不過謝謝你陪著我到這裡。")]
+            )
+        )
+        return
+
+    # 翻牌後正式關閉對話
+    session = await _get_session(user_id)
+    session["in_dialog"] = False
+    await _save_session(user_id, session)
+
+    from services.tarot_projective import build_closure_revealed_flex
+    card_name   = insight.get("tarot_card_name", "")
+    orientation = insight.get("tarot_orientation", "UPRIGHT")
+    tarot_text  = insight.get("tarot_insight", "")
+    pos_label   = "逆位" if orientation == "REVERSED" else "正位"
+
+    flex = build_closure_revealed_flex(card_name, orientation, tarot_text)
+
+    await line_bot_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[FlexMessage(
+                alt_text=f"翻開今日引導牌【{card_name}・{pos_label}】🃏",
+                contents=FlexContainer.from_dict(flex)
+            )]
+        )
+    )
 
 
 async def handle_set_context(

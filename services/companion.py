@@ -92,17 +92,47 @@ RUPTURE_REPAIR_PROMPT = """對話紀錄：
 只輸出給用戶看的訊息，1-2 句，不超過 40 字，絕對不包含問號。"""
 
 
+# ── Gentle Confrontation（理智化防衛面質）──────────────────
+
+INTELLECTUALIZATION_SYSTEM = """你是心事日記。眼前這個人正在用大量的邏輯和道理包裹自己的痛苦——
+他說得頭頭是道，但情感藏在分析的外殼後面。
+
+你的任務不是跟他辯論邏輯，也不是給更多分析。
+你要輕輕地繞過他建的智識堡壘，直接觸碰他身體裡的感受。
+
+方法：
+- 承認他的分析很有洞察力（不否定、不競爭）
+- 然後把話題從「腦」轉移到「身體感官」或「情感底層」
+- 用具體的身體部位問句（胸口、肩膀、肚子、呼吸）
+- 語氣溫柔、非批判、充滿好奇
+
+示範（只是參考，不要照抄）：
+「你分析得非常透徹。當你用這麼清晰的視角看這一切時，胸口那裡——感覺到什麼？」
+「聽起來你把這件事看得很清楚了。我有點好奇，說這些話的時候，身體有什麼反應嗎？」
+
+嚴格規則：
+- 禁止任何形式的教育或「應該」句型
+- 禁止複製用戶的分析框架繼續展開
+- 只輸出給用戶看的訊息本身"""
+
+INTELLECTUALIZATION_PROMPT = """對話紀錄：
+{conversation_history}
+
+用戶剛才說：{user_message}
+
+請用溫柔面質的方式，承認他的分析視角，然後把注意力引導到身體感受或情感底層。
+只輸出給用戶看的訊息，2-3 句，不超過 60 字。"""
+
+
 async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
     """
     主對話入口
     回傳 (reply_text, session_updates)
 
-    若上一輪偵測到 alliance_rupture，切換為 Rupture Repair 模式：
-    - 使用專用 System Prompt
-    - 禁止提問，純情感反映
-
-    若 crisis_cooldown_turns > 0，在 System Prompt 注入高風險脈絡，
-    避免 AI 在用戶危機後的對話中「失憶」。
+    優先級：
+    1. alliance_rupture → Rupture Repair 模式
+    2. defense_mechanism == INTELLECTUALIZATION → Gentle Confrontation 模式
+    3. 一般陪伴對話
     """
     history     = session.get("history", [])
     history_str = _format_history(history)
@@ -129,6 +159,22 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
             "alliance_rupture": None,
             "rupture_repair_cooldown": 2,   # 保護 2 輪
         }}
+
+    # ── Gentle Confrontation（理智化防衛：繞過邏輯觸碰身體感受）──
+    if psych.get("defense_mechanism") == "INTELLECTUALIZATION":
+        prompt = INTELLECTUALIZATION_PROMPT.format(
+            conversation_history=history_str,
+            user_message=user_text,
+        )
+        reply = await call_api(
+            prompt=prompt,
+            system=INTELLECTUALIZATION_SYSTEM,
+            max_tokens=120,
+            tier="haiku",
+        )
+        if not reply:
+            reply = "你分析得很清楚。當你說這些的時候，身體有什麼感覺嗎？"
+        return reply, {}
 
     # 危機冷卻脈絡注入（crisis_cooldown_turns > 0 時）
     crisis_turns = psych.get("crisis_cooldown_turns", 0)

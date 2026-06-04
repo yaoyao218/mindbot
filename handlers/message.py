@@ -172,6 +172,11 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     text = event.message.text.strip()
     reply_token = event.reply_token
 
+    # ── 提前取得 Session（供語境守衛使用）────────────────
+    # 在所有關鍵字路由之前取得，避免「對話中 → 登入/紀錄關鍵字誤觸」的語境破壞
+    session = await get_session(user_id)
+    _in_dialog = session.get("in_dialog", False)
+
     # ── 關鍵字路由 ────────────────────────────────────────
     # 精確比對用（去首尾空白後的完整訊息）
     _t = text.lower().strip()
@@ -191,56 +196,54 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
         await send_help(reply_token, line_bot_api)
         return
 
-    if any(kw in text for kw in WEBSITE_KEYWORDS):
-        await send_website_link(reply_token, line_bot_api)
-        return
+    # 以下關鍵字路由僅在非深度對話時觸發，避免「對話中誤觸」破壞心理安全感
+    if not _in_dialog:
+        if any(kw in text for kw in WEBSITE_KEYWORDS):
+            await send_website_link(reply_token, line_bot_api)
+            return
 
-    if any(kw in _t for kw in LOGIN_KEYWORDS):
-        await send_login_link(user_id, reply_token, line_bot_api)
-        return
+        if any(kw in _t for kw in LOGIN_KEYWORDS):
+            await send_login_link(user_id, reply_token, line_bot_api)
+            return
 
-    # ── 推播時間設定 ─────────────────────────────────────
-    if any(kw in text for kw in PUSH_SETUP_KEYWORDS):
-        parsed = parse_push_time(text)
-        if parsed:
-            h, m = parsed
-            await set_push_schedule(user_id, h, m)
+        # ── 推播時間設定 ───────────────────────────────────
+        if any(kw in text for kw in PUSH_SETUP_KEYWORDS):
+            parsed = parse_push_time(text)
+            if parsed:
+                h, m = parsed
+                await set_push_schedule(user_id, h, m)
+                await _reply(reply_token,
+                    f"好的，每天 {h:02d}:{m:02d} 我會傳今日一問給你 🌙\n\n"
+                    "輸入「取消推播」可以隨時關閉。", line_bot_api)
+            else:
+                await _reply(reply_token,
+                    "請告訴我你希望幾點收到提問 🌙\n例如：「設定推播 21:00」",
+                    line_bot_api)
+            return
+
+        if any(kw in text for kw in PUSH_OFF_KEYWORDS):
+            try:
+                from services.db_persistent import get_pool
+                pool = await get_pool()
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE push_schedule SET enabled=0 WHERE user_id=$1",
+                        user_id)
+            except Exception:
+                pass
             await _reply(reply_token,
-                f"好的，每天 {h:02d}:{m:02d} 我會傳今日一問給你 🌙\n\n"
-                "輸入「取消推播」可以隨時關閉。", line_bot_api)
-        else:
-            await _reply(reply_token,
-                "請告訴我你希望幾點收到提問 🌙\n例如：「設定推播 21:00」",
+                "已關閉每日推播 🌙\n想重新開啟時，傳「設定推播」給我。",
                 line_bot_api)
-        return
-
-    if any(kw in text for kw in PUSH_OFF_KEYWORDS):
-        try:
-            from services.db_persistent import get_pool
-            pool = await get_pool()
-            async with pool.acquire() as conn:
-                await conn.execute(
-                    "UPDATE push_schedule SET enabled=0 WHERE user_id=$1",
-                    user_id)
-        except Exception:
-            pass
-        await _reply(reply_token,
-            "已關閉每日推播 🌙\n想重新開啟時，傳「設定推播」給我。",
-            line_bot_api)
-        return
+            return
 
     # ── 停止對話 ─────────────────────────────────────────
-    session_check = await get_session(user_id)
-    if any(kw in text for kw in STOP_KEYWORDS) and session_check.get("in_dialog"):
+    if any(kw in text for kw in STOP_KEYWORDS) and _in_dialog:
         await clear_session(user_id)
         await _reply(reply_token,
             "好的，我們先在這裡停下來。\n\n隨時想繼續，或有什麼想說的，都可以傳訊息給我。",
             line_bot_api)
         await send_website_link_push(user_id, line_bot_api)
         return
-
-    # ── 取得 Session ──────────────────────────────────────
-    session = await get_session(user_id)
 
     # 進行中的簽到補充
     if session.get("pending_checkin"):
@@ -407,7 +410,9 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
             from services.symbolic import assign_tarot_structured
             from services.tarot_projective import build_closure_flex, generate_dialogue_insight
             from services.tarot_quotes_pool import fetch_quote_by_emotion
-            from services.db_persistent import save_emotion_calendar
+            from services.db_persistent import (
+                save_emotion_calendar, save_psych_insight
+            )
             import datetime as _dt
 
             arousal_val = _EMOTION_AROUSAL.get(emotion, 3)
@@ -438,19 +443,36 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
                     tarot_reversed=tarot.get("is_reversed", False),
                 )
 
-            # 4. 寫入 psych（供 save_psych_state 帶入）
+            # 4. 儲存 psych_insights，取得 ID（供翻牌 Postback 查詢）
+            _insight_id = None
+            try:
+                _insight_id = await save_psych_insight(user_id, {
+                    "trigger_turn":     total_turn,
+                    "dialogue_insight": dialogue_insight,
+                    "dominant_emotion": emotion,
+                    "quote_author":     quote_author,
+                    "end_quote":        quote_text,
+                    "tarot_card_name":  tarot.get("card_name", ""),
+                    "tarot_orientation": "REVERSED" if tarot.get("is_reversed") else "UPRIGHT",
+                    "tarot_insight":    tarot.get("meaning", ""),
+                })
+            except Exception as _e:
+                print(f"[Closure] psych_insight save failed: {_e}")
+
+            # 5. 寫入 psych（供 save_psych_state 帶入）
             session["psych"]["end_quote"]        = quote_text
             session["psych"]["quote_author"]     = quote_author
             session["psych"]["dialogue_insight"] = dialogue_insight
             session["psych"]["tarot_card"]       = session.get("current_projective_card")
 
-            # 5. 準備 Flex 字卡
+            # 6. 準備 Flex 字卡（帶 insight_id → 覆蓋牌翻牌互動）
             _closure_flex = build_closure_flex(
                 quote_text,
                 tarot["mode"] != "quote",
                 tarot.get("card_name"),
                 quote_author,
                 dialogue_insight,
+                insight_id=_insight_id,
             )
         except Exception as e:
             print(f"[Closure] Flex build failed: {e}")
@@ -495,12 +517,12 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     await append_message(user_id, "bot", reply_text)
 
     if _closure_flex:
-        # 收尾：AI 回覆 + Flex 字卡，合併成一次 reply（兩則）
+        # 收尾：只傳一張整合 Flex 字卡（洞察＋名言＋塔羅已整合其中）
+        # 不再額外送 TextMessage，避免 LINE 多泡泡震動與資訊爆炸
         await line_bot_api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
                 messages=[
-                    TextMessage(text=reply_text),
                     FlexMessage(
                         alt_text="🌙 今日日記已封存",
                         contents=FlexContainer.from_dict(_closure_flex)

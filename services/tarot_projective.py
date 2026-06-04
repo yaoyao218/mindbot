@@ -245,26 +245,50 @@ def build_closure_flex(
     card_name: str = None,
     quote_author: str = None,
     dialogue_insight: str = None,
+    insight_id: int = None,
 ) -> dict:
     """
     對話收尾的 Flex Message 字卡。
-    含：🌙 封存標題 + [dialogue_insight 洞察] + 名言 + 作者 + 查看按鈕。
-    """
-    header_line = f"【{card_name}】" if is_tarot and card_name else "今日名言"
-    author_line  = f"—— {quote_author}" if quote_author else ""
+    結構：🌙 封存標題 ＋ AI 洞察 ＋ 哲人名言 ＋ 覆蓋塔羅翻牌 ＋ 查看日記按鈕。
 
-    body_contents = [
+    當 insight_id 提供時，塔羅牌以「覆蓋」狀態呈現，點擊觸發翻牌 Postback。
+    未提供時降級為純文字名言卡（相容舊流程）。
+    """
+    import datetime as _dt
+    today_str = _dt.date.today().strftime("%-m 月 %-d 日") if hasattr(
+        _dt.date.today(), "strftime") else str(_dt.date.today())
+
+    author_line = f"—— {quote_author}" if quote_author else ""
+
+    body_contents: list[dict] = [
+        # ── Header ──────────────────────────────────────────────
         {
-            "type": "text",
-            "text": "🌙 今日日記已封存",
-            "size": "sm",
-            "color": "#c9a84c",
-            "weight": "bold",
-            "letterSpacing": "2px",
+            "type": "box",
+            "layout": "horizontal",
+            "justifyContent": "space-between",
+            "alignItems": "center",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "🌙 今日日記已封存",
+                    "size": "sm",
+                    "color": "#c9a84c",
+                    "weight": "bold",
+                    "flex": 1,
+                },
+                {
+                    "type": "text",
+                    "text": today_str,
+                    "size": "xxs",
+                    "color": "#6b5d4f",
+                    "flex": 0,
+                    "align": "end",
+                },
+            ],
         },
         {
             "type": "text",
-            "text": "謝謝你今天願意對我說說心裡的話。\n把重擔留在這裡，我們明天再寫新的一頁。",
+            "text": "謝謝你今天願意對我說說心裡的話。",
             "size": "xs",
             "color": "#6b5d4f",
             "wrap": True,
@@ -272,17 +296,17 @@ def build_closure_flex(
         },
     ]
 
-    # 可選：對話洞察摘要
+    # ── AI 對話洞察 ─────────────────────────────────────────
     if dialogue_insight:
         body_contents += [
-            {"type": "separator", "color": "#ffffff0d", "margin": "md"},
+            {"type": "separator", "color": "#ffffff0d", "margin": "lg"},
             {
                 "type": "text",
-                "text": "本次對話的你",
+                "text": "TODAY'S MIRROR",
                 "size": "xxs",
                 "color": "#4a7c59",
                 "letterSpacing": "3px",
-                "margin": "md",
+                "margin": "lg",
             },
             {
                 "type": "text",
@@ -295,16 +319,16 @@ def build_closure_flex(
             },
         ]
 
-    # 名言區塊
+    # ── 哲人名言 ────────────────────────────────────────────
     body_contents += [
-        {"type": "separator", "color": "#c9a84c30", "margin": "md"},
+        {"type": "separator", "color": "#c9a84c30", "margin": "lg"},
         {
             "type": "text",
-            "text": header_line,
+            "text": "WISDOM",
             "size": "xxs",
             "color": "#4a7c59",
             "letterSpacing": "3px",
-            "margin": "md",
+            "margin": "lg",
         },
         {
             "type": "text",
@@ -313,10 +337,10 @@ def build_closure_flex(
             "color": "#e8e0d0",
             "wrap": True,
             "lineSpacing": "8px",
+            "style": "italic",
             "margin": "xs",
         },
     ]
-
     if author_line:
         body_contents.append({
             "type": "text",
@@ -327,13 +351,84 @@ def build_closure_flex(
             "margin": "xs",
         })
 
+    # ── 塔羅（覆蓋牌 + 翻牌按鈕 / 降級純文字）────────────────
+    if insight_id:
+        body_contents += [
+            {"type": "separator", "color": "#c9a84c30", "margin": "lg"},
+            {
+                "type": "text",
+                "text": "TODAY'S CARD",
+                "size": "xxs",
+                "color": "#4a7c59",
+                "letterSpacing": "3px",
+                "margin": "lg",
+            },
+            {
+                "type": "text",
+                "text": "今日一張引導牌正在等待你翻開。",
+                "size": "xs",
+                "color": "#6b5d4f",
+                "wrap": True,
+                "margin": "xs",
+            },
+            {
+                # 覆蓋牌圖示區域
+                "type": "box",
+                "layout": "vertical",
+                "height": "100px",
+                "justifyContent": "center",
+                "alignItems": "center",
+                "backgroundColor": "#161c18",
+                "cornerRadius": "10px",
+                "borderWidth": "1px",
+                "borderColor": "#c9a84c40",
+                "margin": "md",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "🎴",
+                        "size": "3xl",
+                        "align": "center",
+                    },
+                    {
+                        "type": "text",
+                        "text": "點我翻牌",
+                        "size": "xxs",
+                        "color": "#c9a84c",
+                        "align": "center",
+                        "margin": "sm",
+                        "letterSpacing": "2px",
+                    },
+                ],
+                "action": {
+                    "type": "postback",
+                    "label": "翻開今日引導牌",
+                    "data": f"action=flip_tarot&insight_id={insight_id}",
+                    "displayText": "（翻開今日引導牌 🃏）",
+                },
+            },
+        ]
+    elif is_tarot and card_name:
+        # 降級：直接顯示牌名（insight_id 不可用時）
+        body_contents += [
+            {"type": "separator", "color": "#c9a84c30", "margin": "lg"},
+            {
+                "type": "text",
+                "text": f"【{card_name}】",
+                "size": "xs",
+                "color": "#c9a84c",
+                "letterSpacing": "2px",
+                "margin": "lg",
+            },
+        ]
+
     return {
         "type": "bubble",
         "size": "kilo",
         "body": {
             "type": "box",
             "layout": "vertical",
-            "spacing": "md",
+            "spacing": "none",
             "backgroundColor": "#0f1410",
             "paddingAll": "20px",
             "contents": body_contents,
@@ -349,12 +444,78 @@ def build_closure_flex(
                     "type": "button",
                     "action": {
                         "type": "uri",
-                        "label": "查看今日情緒曲線",
+                        "label": "查看我的心事本",
                         "uri": f"{LIFF_URL}#dashboard",
                     },
                     "style": "primary",
                     "color": "#4a7c59",
                     "height": "sm",
+                },
+            ],
+        },
+    }
+
+
+def build_closure_revealed_flex(
+    card_name: str, orientation: str, tarot_insight: str
+) -> dict:
+    """
+    翻牌後顯示的揭示卡片（收尾專用，與 STAGNANT 翻牌的 build_revealed_card_flex 獨立）。
+    """
+    pos = "逆位" if orientation == "REVERSED" else "正位"
+    return {
+        "type": "bubble",
+        "size": "kilo",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "backgroundColor": "#0f1410",
+            "paddingAll": "20px",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "justifyContent": "space-between",
+                    "alignItems": "center",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": f"【{card_name}】",
+                            "size": "lg",
+                            "color": "#c9a84c",
+                            "weight": "bold",
+                            "flex": 1,
+                        },
+                        {
+                            "type": "text",
+                            "text": pos,
+                            "size": "xs",
+                            "color": "#6b5d4f",
+                            "align": "end",
+                            "flex": 0,
+                        },
+                    ],
+                },
+                {"type": "separator", "color": "#c9a84c30", "margin": "md"},
+                {
+                    "type": "text",
+                    "text": tarot_insight,
+                    "size": "sm",
+                    "color": "#a89880",
+                    "wrap": True,
+                    "lineSpacing": "7px",
+                    "margin": "sm",
+                },
+                {"type": "separator", "color": "#ffffff0d", "margin": "lg"},
+                {
+                    "type": "text",
+                    "text": "把這張牌的意象帶在心裡。\n隨時想說更多，我在。",
+                    "size": "xs",
+                    "color": "#6b5d4f",
+                    "wrap": True,
+                    "lineSpacing": "5px",
+                    "margin": "sm",
                 },
             ],
         },
