@@ -605,7 +605,25 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
             "切勿說教、批判或進行高強度信念拆解。\n"
         )
 
-    system = COMPANION_SYSTEM + crisis_patch
+    # Track A：第 5 輪主動封存邀請（僅限 deep context，且只觸發一次）
+    session_total_turn = session.get("total_turn", 0)
+    current_context    = psych.get("current_context") or session.get("current_context", "")
+    closure_patch = ""
+    if (
+        current_context == "deep"
+        and session_total_turn >= 5
+        and not psych.get("closure_invite_shown")
+    ):
+        closure_patch = (
+            "\n\n【第 5 輪臨床指令：溫柔封存邀請（僅執行一次）】\n"
+            "在完成本輪的情感反映後，請在回覆結尾用最自然、最溫柔的語氣，"
+            "主動提議是否想將今天的心事好好封存起來。\n"
+            "範例語氣（必須根據本輪內容重新生成，禁止照抄）：\n"
+            "「如果你覺得今天差不多說到這裡了，我們可以一起把這段心事輕輕地闔上...」\n"
+            "語氣要溫柔、非催促、讓對方有選擇空間。字數不超過原有回覆的一倍。"
+        )
+
+    system = COMPANION_SYSTEM + crisis_patch + closure_patch
 
     prompt = COMPANION_PROMPT_TEMPLATE.format(
         conversation_history=history_str,
@@ -621,7 +639,12 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
     if not reply:
         reply = "嗯，你說的這些我都在聽著。"
 
-    return reply, {}
+    # 若注入了封存邀請，標記已顯示，防止下輪重複
+    updates = {}
+    if closure_patch:
+        updates = {"psych": {**psych, "closure_invite_shown": True}}
+
+    return reply, updates
 
 
 # ── 情緒偵測（輕量，用於選擇象徵系統）───────────────────

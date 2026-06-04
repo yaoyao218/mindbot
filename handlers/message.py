@@ -141,6 +141,16 @@ WEBSITE_KEYWORDS  = ["看紀錄", "我的記錄", "心情記錄", "情緒記錄"
 LOGIN_KEYWORDS    = ["登入", "登入網站", "進入網站", "網站登入", "login"]
 PUSH_OFF_KEYWORDS = ["關閉推播", "取消推播", "不要推播", "停止推播"]
 
+# Track B 被動封存攔截關鍵字（在 dialog 中偵測 → 早攔截，跳過 AI 對話直接封存）
+# 優先於 detect_closing_signal()，避免 AI 仍回應一句後才封存
+_PASSIVE_CLOSING_KEYWORDS = (
+    "先這樣", "先這樣吧", "沒了", "差不多了", "好了", "就這樣", "沒有然後了",
+    "晚安", "謝謝你", "謝謝你今天", "拜拜", "掰掰", "感恩", "明天見",
+    "先去休息", "先休息了", "我要去睡了", "去睡了", "bye",
+)
+# Track B-2 stagnant 偵測門檻（≤ N 字視為敷衍短句）
+_STAGNANT_CHAR_LIMIT = 3
+
 APP_URL = "https://liff.line.me/2010279401-zI4pqH8D"
 
 
@@ -307,6 +317,88 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     # 進行中的簽到補充
     if session.get("pending_checkin"):
         await handle_checkin_supplement(event, line_bot_api, session, text)
+        return
+
+    # ── Track B 被動封存早攔截（在 dialog 中偵測，跳過 AI 直接封存）──
+    # 必須在 short_reply 和主對話之前執行，讓「晚安/謝謝你/先這樣」等
+    # 道別語不再先觸發 AI 回覆，而是直接進入 SummaryModule
+    if _in_dialog and any(kw in text for kw in _PASSIVE_CLOSING_KEYWORDS):
+        # 1. 將當前訊息存入歷史（供洞察生成使用）
+        await append_message(user_id, "user", text)
+        session.setdefault("history", []).append({"role": "user", "text": text})
+        _b_turn = session.get("total_turn", 0) + 1
+        session["total_turn"] = _b_turn
+
+        _b_emotion  = session.get("psych", {}).get("emotion", "平靜") or "平靜"
+        _B_AROUSAL  = {"憤怒": 4, "焦慮": 4, "委屈": 3, "疲憊": 3, "悲傷": 3,
+                       "自我懷疑": 3, "迷茫": 2, "空洞": 2, "平靜": 2, "釋然": 2}
+        _b_arousal  = _B_AROUSAL.get(_b_emotion, 3)
+
+        _b_flex = None
+        try:
+            from services.symbolic import assign_tarot_structured
+            from services.tarot_projective import build_closure_flex, generate_dialogue_insight
+            from services.tarot_quotes_pool import fetch_quote_by_emotion
+            from services.db_persistent import save_emotion_calendar, save_psych_insight
+            import datetime as _bdt
+
+            _b_tarot  = assign_tarot_structured(_b_emotion, _b_arousal)
+            _b_insight = ""
+            try:
+                _b_insight = await generate_dialogue_insight(session.get("history", []))
+            except Exception:
+                pass
+            _b_qdata  = fetch_quote_by_emotion(_b_emotion)
+            _b_quote  = _b_qdata["text"]
+            _b_author = _b_qdata["author"]
+
+            if _b_tarot.get("card_name"):
+                await save_emotion_calendar(
+                    user_id, _bdt.date.today(),
+                    session.get("psych", {}).get("emotion_emoji", "😐"),
+                    _b_emotion,
+                    tarot_card=_b_tarot["card_name"],
+                    tarot_meaning=_b_tarot["meaning"],
+                    tarot_reversed=_b_tarot.get("is_reversed", False),
+                )
+            _b_iid = None
+            try:
+                _b_iid = await save_psych_insight(user_id, {
+                    "trigger_turn":     _b_turn,
+                    "dialogue_insight": _b_insight,
+                    "dominant_emotion": _b_emotion,
+                    "quote_author":     _b_author,
+                    "end_quote":        _b_quote,
+                    "tarot_card_name":  _b_tarot.get("card_name", ""),
+                    "tarot_orientation": "REVERSED" if _b_tarot.get("is_reversed") else "UPRIGHT",
+                    "tarot_insight":    _b_tarot.get("meaning", ""),
+                })
+            except Exception:
+                pass
+
+            _b_flex = build_closure_flex(
+                _b_quote, _b_tarot["mode"] != "quote",
+                _b_tarot.get("card_name"), _b_author, _b_insight,
+                insight_id=_b_iid,
+            )
+        except Exception as _be:
+            print(f"[Track B Closure] {_be}")
+
+        session["in_dialog"] = False
+        await save_session(user_id, session)
+
+        if _b_flex:
+            await line_bot_api.reply_message(ReplyMessageRequest(
+                reply_token=reply_token,
+                messages=[FlexMessage(
+                    alt_text="🌙 今日日記已封存",
+                    contents=FlexContainer.from_dict(_b_flex),
+                )]
+            ))
+        else:
+            await _reply(reply_token,
+                "今天說的這些，我都記住了 🌙\n下次想聊隨時來。", line_bot_api)
+        await send_website_link_push(user_id, line_bot_api)
         return
 
     # ── 短訊息接話（優先攔截，不走 AI）──────────────────
@@ -586,6 +678,50 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     if cooldown > 0:
         session["psych"]["crisis_cooldown_turns"] = cooldown - 1
 
+    # ── Track A：第 5 輪 deep context 主動封存邀請按鈕 ────────
+    # companion.py 已注入封存邀請文字，這裡加 QuickReply 讓用戶一鍵確認
+    _track_a_qr = None
+    if (
+        not _closure_flex
+        and session.get("current_context") == "deep"
+        and total_turn >= 5
+        and session.get("psych", {}).get("closure_invite_shown")
+        and not session.get("track_a_qr_sent")
+    ):
+        session["track_a_qr_sent"] = True
+        _track_a_qr = QuickReply(items=[
+            QuickReplyItem(action=MessageAction(
+                label="🌙 封存今天",
+                text="好，先這樣 🌙",
+            )),
+            QuickReplyItem(action=MessageAction(
+                label="繼續說說",
+                text="我還想繼續說",
+            )),
+        ])
+
+    # ── Track B-2 stagnant 偵測：連續 2 輪 ≤3 字 → 加封存邀請按鈕 ──
+    # 不自動封存，只是溫柔提示「可以封存了」
+    _stagnant_qr = None
+    if (
+        not _closure_flex
+        and _track_a_qr is None
+        and _in_dialog
+        and len(text) <= _STAGNANT_CHAR_LIMIT
+    ):
+        _prev_user_text = ""
+        for _hh in reversed(session.get("history", [])[-6:]):
+            if _hh.get("role") == "user" and _hh.get("text", "") != text:
+                _prev_user_text = _hh.get("text", "")
+                break
+        if len(_prev_user_text) <= _STAGNANT_CHAR_LIMIT and _prev_user_text:
+            _stagnant_qr = QuickReply(items=[
+                QuickReplyItem(action=MessageAction(
+                    label="🌙 封存今天",
+                    text="好，先這樣 🌙",
+                )),
+            ])
+
     # 回覆並儲存
     session["history"].append({"role": "bot", "text": reply_text})
     if len(session["history"]) > 30:
@@ -595,17 +731,26 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     await append_message(user_id, "bot", reply_text)
 
     if _closure_flex:
-        # 收尾：只傳一張整合 Flex 字卡（洞察＋名言＋塔羅已整合其中）
-        # 不再額外送 TextMessage，避免 LINE 多泡泡震動與資訊爆炸
+        # Track B-1 / 既有 _is_closing：AI 文字 + 封存字卡一起發送
         await line_bot_api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
                 messages=[
+                    TextMessage(text=reply_text),
                     FlexMessage(
                         alt_text="🌙 今日日記已封存",
-                        contents=FlexContainer.from_dict(_closure_flex)
+                        contents=FlexContainer.from_dict(_closure_flex),
                     ),
                 ]
+            )
+        )
+    elif _track_a_qr or _stagnant_qr:
+        # Track A / stagnant：AI 文字 + QuickReply 封存按鈕
+        _active_qr = _track_a_qr or _stagnant_qr
+        await line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=reply_token,
+                messages=[TextMessage(text=reply_text, quick_reply=_active_qr)]
             )
         )
     else:

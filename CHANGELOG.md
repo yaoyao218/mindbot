@@ -163,6 +163,30 @@ elif arousal_level >= 4:
 
 ---
 
+---
+
+### 9. 精準對話收尾：雙軌封存機制（主動邀請 + 多維度被動攔截）
+**檔案**：`handlers/message.py`、`services/companion.py`、`services/nudge.py`
+
+**背景**：原收尾偵測過於模糊，第 1、2 輪就塞入封存字卡，或用戶說「晚安」時 AI 仍回應一句再封存。
+
+#### Track A — 第 5 輪主動封存邀請
+- `companion.py`：`total_turn >= 5 AND current_context == "deep"` 時注入 `closure_patch`，AI 在情感反映後自然提議封存，並標記 `closure_invite_shown = True` 防止重複
+- `message.py`：偵測到 `closure_invite_shown` 後，在 TextMessage 附加 QuickReply：「🌙 封存今天（text: 好，先這樣 🌙）」+ 「繼續說說」，一鍵確認或繼續
+- 點擊「好，先這樣 🌙」→ 觸發既有 `detect_closing_signal()` → `_is_closing = True` → SummaryModule
+
+#### Track B-1 — 被動關鍵字早攔截
+- 新增 `_PASSIVE_CLOSING_KEYWORDS`（18 組：先這樣、晚安、謝謝你、拜拜、感恩、明天見…）
+- 在 dialog 中偵測到關鍵字 → **跳過 AI 對話**，直接運行 SummaryModule（insight + tarot + quote + closure flex），完整閉環後 return
+
+#### Track B-2 — Stagnant 敷衍阻斷
+- 連續 2 輪用戶輸入 ≤3 字 → 在正常 AI 回覆後附加「🌙 封存今天」QuickReply 按鈕，溫柔詢問是否封存（不自動關閉）
+
+#### `nudge.py` 更新
+- `should_show_closing()`：`current_context == "deep"` 時停用 `total_turn % 5` 輪數觸發，僅保留 Arousal 驟降條件，防止與 Track A 雙重觸發
+
+---
+
 ## 變更影響範圍
 
 | 檔案 | 變更類型 |

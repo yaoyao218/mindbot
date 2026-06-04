@@ -186,7 +186,6 @@ def should_show_closing(session: dict, arousal_level: int) -> bool:
     total_turn = session.get("total_turn", 0)
 
     # 【鐵律】前 3 輪絕對不發射收尾提示
-    # 防止用戶才開始傾訴就被催促結束（對話初期的心理安全感保護）
     if total_turn < 4:
         return False
 
@@ -196,16 +195,27 @@ def should_show_closing(session: dict, arousal_level: int) -> bool:
     if session.get("closing_shown_date") == today:
         return False
 
-    # 條件 A：每 5 輪（第 5、10、15... 輪）
+    current_context = session.get("current_context", "")
+
+    # deep 模式：Track A（5 輪 companion 注入）已處理主動封存邀請，
+    # 本函式只保留 Arousal 驟降這一個被動條件，避免重複觸發
+    if current_context == "deep":
+        prev_arousal = session.get("prev_arousal", 3)
+        if prev_arousal >= 4 and arousal_level <= 2:
+            return True
+        return False
+
+    # 非 deep 模式：保留原有三條件
+    # 條件 A：每 5 輪
     if total_turn % 5 == 0:
         return True
 
-    # 條件 B：Arousal 從高降回低（前一輪 ≥ 4，這輪 ≤ 2）
+    # 條件 B：Arousal 驟降
     prev_arousal = session.get("prev_arousal", 3)
     if prev_arousal >= 4 and arousal_level <= 2:
         return True
 
-    # 條件 C：晚上 9 點後（台灣時間）+ 至少 4 輪（已由上方保護）
+    # 條件 C：晚上 9 點後（台灣時間）
     from datetime import datetime
     import pytz
     try:
