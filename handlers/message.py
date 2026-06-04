@@ -196,7 +196,7 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
 
     # ── 選單脈絡跳轉：物理重置 Session，防止舊脈絡污染新對話 ──
     # 必須在所有其他路由之前處理，否則帶著 alliance_rupture / history 進主流程
-    if text == "🪐 靜心深度傾聽":
+    if text == "🛋️ 進入深度陪伴":
         session["history"] = []
         session["in_dialog"] = True
         session["current_context"] = "deep"
@@ -210,7 +210,7 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
         await save_session(user_id, session)
         await _reply(
             reply_token,
-            "想給自己一段安靜的時間，好好傾聽內心。\n\n現在，你調整到舒服的姿勢了嗎？感覺如何？",
+            "歡迎回到這個安全的空間。把外面的紛擾先放開，現在這裡只有我們，你想聊聊什麼？",
             line_bot_api,
         )
         return
@@ -986,10 +986,10 @@ async def send_help(reply_token: str, line_bot_api: MessagingApi):
 
     cards = [
         _card(
-            "🪐", "靜心深度傾聽",
-            "想給自己一段安靜的時間傾聽內心？傳送「靜心深度傾聽」，無論何時，我都會放慢步調，陪你梳理心裡的小劇場，並在收尾時為你抽出心靈投射卡片。",
-            "進入靜心深度傾聽",
-            {"type": "message", "label": "進入靜心深度傾聽", "text": "🪐 靜心深度傾聽"},
+            "🛋️", "進入深度陪伴",
+            "需要一個安全的空間好好說說話？傳送「進入深度陪伴」，無論何時，我都會放慢步調，陪你梳理心裡的小劇場，並在收尾時為你抽出心靈投射卡片。",
+            "進入深度陪伴",
+            {"type": "message", "label": "進入深度陪伴", "text": "🛋️ 進入深度陪伴"},
         ),
         _card(
             "🏃", "快速心情宣洩",

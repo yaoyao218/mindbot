@@ -226,9 +226,9 @@ def _build_context_flex(question: str) -> dict:
                     "type": "button",
                     "action": {
                         "type": "postback",
-                        "label": "🪐 靜心深度傾聽",
+                        "label": "🛋️ 進入深度陪伴",
                         "data": "action=set_context&value=deep",
-                        "displayText": "我想靜心深度傾聽",
+                        "displayText": "我想進入深度陪伴",
                     },
                     "style": "primary",
                     "color": "#4a7c59",

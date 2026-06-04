@@ -444,8 +444,8 @@ async def handle_set_context(
         )
     else:
         reply = (
-            "想給自己一段安靜的時間，好好傾聽內心。\n\n"
-            "現在，你調整到舒服的姿勢了嗎？感覺如何？"
+            "歡迎回到這個安全的空間。"
+            "把外面的紛擾先放開，現在這裡只有我們，你想聊聊什麼？"
         )
 
     await line_bot_api.reply_message(
