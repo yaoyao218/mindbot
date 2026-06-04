@@ -184,30 +184,38 @@ EXTERNALIZATION_PROMPT = """對話紀錄：
 # 適用：高喚起（arousal >= 4）、短句焦慮、急性身體不適、Socratic 降級
 
 SUPPORTIVE_REFLECTION_SYSTEM = """你是心事日記。眼前這個人正處於高情緒強度，或在短句中透露出急性焦慮、身體不適（胃痛、心悸、無力、喘不過氣）。
-此刻他不需要被引導、不需要被探問——他需要的只是：有人真的聽見了。
+你的角色是穩固的情緒容器，不是引導者。
+
+# 核心任務（每輪必做）
+精準抓取用戶說的「身體感官詞彙」（胃攪動、心跳、呼吸、肩膀）或「情感詞彙」，
+用平實、溫和、具備人味的語言進行情感反映，讓他感受到「有人真的聽見了」。
+
+# 提問頻率隔離鎖（系統動態注入，每輪必讀）
+提示詞底部的【本輪提問許可】區塊會即時告知本輪是否允許提問，請嚴格遵守。
+
+# 若本輪允許提問，安全探針準則
+- 只能詢問【當下】的身體感官或陪伴需求，禁止詢問原因、計畫、過去事件
+- 安全探針範例（禁止照抄，必須根據本輪內容重新生成）：
+  「此時此刻，你的呼吸是什麼節奏？」
+  「胃的攪動還在嗎，還是稍微緩了一點？」
+  「你希望我就陪在這裡，還是想多說一些？」
+- 嚴禁使用：「為什麼」「然後呢」「你打算怎麼辦」「這說明了什麼」
 
 # 鐵律（違反即失敗）
-- 【絕對禁止】任何問號、問句、引導性提問
 - 【絕對禁止】建議、分析、說理
 - 【絕對禁止】「我理解」「這很正常」「你很棒」等制式台詞
-- 總字數不超過 40 字
-
-# 任務（情感反映技術）
-把用戶說的痛苦原話輕輕「映射」回給他，讓他感受到被完整接收。
-重複他說的關鍵詞，或輕輕命名那個身體感受，用最少的字傳遞最大的在場感。
-
-# 語氣示範（禁止照抄——必須根據用戶本輪說的話重新生成）
-「胃在攪動、又吃不下——這幾天真的耗盡了吧。」
-「說壓力很大，那種感覺一直都壓在那裡沒有散掉。」
-「聽起來這件事一直沉在心底，沉到很難開口。」"""
+- 【絕對禁止】連續提問（兩輪內不得出現兩個問號）
+- 總字數不超過 45 字"""
 
 SUPPORTIVE_REFLECTION_PROMPT = """對話紀錄：
 {conversation_history}
 
 用戶剛才說：{user_message}
 
+{allow_question_directive}
+
 把用戶說的痛苦原話映射回給他，讓他感受到被完整接收。
-只輸出給用戶看的訊息，1-2 句，不超過 40 字，絕對不包含問號。"""
+只輸出給用戶看的訊息，1-2 句，不超過 45 字。"""
 
 
 # ── Socratic（精準反問：長文、理智化、低喚起時才啟動）────────
@@ -397,14 +405,38 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
         return reply, {"psych": {**psych, "method": "Initial"}}
 
     if current_method == "Supportive_Reflection":
+        # 提問頻率隔離鎖：往前找最後一條 bot 回覆，若含問號則本輪禁止提問
+        # history[-1] 是本輪 user 輸入（message.py 已 append），往前找 bot
+        allow_question = True
+        for h in reversed(history[:-1]):
+            if h.get("role") == "bot":
+                last_bot_text = h.get("text", "")
+                if "？" in last_bot_text or "?" in last_bot_text:
+                    allow_question = False
+                break
+
+        if allow_question:
+            allow_question_directive = (
+                "【本輪提問許可：✅ 允許】"
+                "完成情感反映後，可在句尾加上【最多一個】極度溫和的當下感官邀請。"
+                "只問身體感官或陪伴需求，嚴禁「為什麼」「然後呢」「你打算怎麼辦」。"
+            )
+        else:
+            allow_question_directive = (
+                "【本輪提問許可：🚫 禁止】"
+                "上一輪 AI 已提問，本輪絕對禁止出現任何問號（？），"
+                "專注靜默陪伴與情感覆述即可。"
+            )
+
         prompt = SUPPORTIVE_REFLECTION_PROMPT.format(
             conversation_history=history_str,
             user_message=user_text,
+            allow_question_directive=allow_question_directive,
         )
         reply = await call_api(
             prompt=prompt,
             system=SUPPORTIVE_REFLECTION_SYSTEM,
-            max_tokens=100,
+            max_tokens=110,
             tier="haiku",
         )
         if not reply:
