@@ -371,8 +371,14 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     except Exception:
         pass
 
-    # ── 攔截器（禁用語過濾）──────────────────────────────
-    reply_text = process_response(raw_reply, fp_result)
+    # ── 攔截器（禁用語過濾 + 問句熔斷）─────────────────────
+    _psych_now = session.get("psych", {})
+    reply_text = process_response(
+        raw_reply,
+        fp_result,
+        defense_mechanism=_psych_now.get("defense_mechanism"),
+        alliance_rupture=_psych_now.get("alliance_rupture"),
+    )
 
     # ── Nudge Pipeline ────────────────────────────────────
 
