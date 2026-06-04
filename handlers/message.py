@@ -68,12 +68,29 @@ try:
         except: await _mem_clear_session(user_id)
 
     async def append_message(user_id, role, text):
+        import datetime as _dt
+        msg_ts = _dt.datetime.utcnow().isoformat() + "Z"
+
         try:   await _dbp.append_message(user_id, role, text)
         except: pass
-        # 同步寫入 in-process 緩衝（不依賴 Redis/DB）
+
+        # In-process 緩衝（同進程 fallback）
         try:
             from services import message_buffer
             message_buffer.add(user_id, role, text)
+        except Exception:
+            pass
+
+        # Redis buffer（跨進程可見，LIFF /api/sync/conversations 即時讀取）
+        # + 設定 snapshot 臟旗標，迫使下次 /api/snapshot 跳過 6h 快取
+        try:
+            from services.redis_client import buffer_message, set_snapshot_dirty
+            await buffer_message(user_id, {
+                "role":       role,
+                "content":    text,
+                "created_at": msg_ts,
+            })
+            await set_snapshot_dirty(user_id)
         except Exception:
             pass
 

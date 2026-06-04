@@ -459,7 +459,7 @@ class AppController {
 
   _api(path, opts = {}) {
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 8000); // 8s timeout
+    const tid = setTimeout(() => controller.abort(), 8000);
     return fetch(path, {
       ...opts,
       signal: controller.signal,
@@ -470,6 +470,22 @@ class AppController {
       },
     }).then(r => {
       clearTimeout(tid);
+
+      // 401：Token 已過期或無效 → 清除本地憑證並觸發重新登入閉環
+      if (r.status === 401) {
+        console.warn('[App] 401 received, clearing credentials and re-login');
+        ['mb_token', 'mb_user_id', 'mb_name'].forEach(k => localStorage.removeItem(k));
+        this._token  = null;
+        this._userId = null;
+        // LIFF 環境：重導向至 LINE 登入；非 LIFF：重載頁面觸發 init()
+        if (window.liff?.isLoggedIn?.()) {
+          window.liff.login({ redirectUri: location.href });
+        } else {
+          location.reload();
+        }
+        throw new Error('401 Unauthorized – relogin triggered');
+      }
+
       if (!r.ok) throw new Error(`${r.status} ${path}`);
       return r.json();
     }).catch(e => {

@@ -350,76 +350,121 @@ async def line_callback_redirect():
 async def line_callback(request: Request):
     """
     前端登入回呼，支援兩種模式：
-      1. LINE OAuth（傳統）：body { code, redirect_uri }
-      2. LIFF：body { liff_token }  → 直接驗證 access token，跳過 code exchange
-    response: { token, user_id, name }
+      1. LIFF：body { liff_token }  → 驗證 access token，簽發 HMAC session token
+      2. LINE OAuth（傳統）：body { code, redirect_uri } → code exchange，簽發 HMAC token
+
+    統一回傳我們自簽的 HMAC session token（不回傳 LINE access token），
+    避免每次 API 呼叫都需打 LINE 外部驗證端點。
     """
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request body")
 
     # ── LIFF 模式：直接驗證 access token ─────────────────
     liff_token = body.get("liff_token")
     if liff_token:
-        async with httpx.AsyncClient(timeout=10) as client:
-            profile_r = await client.get(
-                "https://api.line.me/v2/profile",
-                headers={"Authorization": f"Bearer {liff_token}"},
-            )
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                profile_r = await client.get(
+                    "https://api.line.me/v2/profile",
+                    headers={"Authorization": f"Bearer {liff_token}"},
+                )
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="LINE API timeout")
+        except httpx.RequestError as e:
+            print(f"[LineCallback/LIFF] network error: {e}")
+            raise HTTPException(status_code=502, detail="LINE API unreachable")
+
+        if profile_r.status_code == 401:
+            raise HTTPException(status_code=401, detail="LIFF token expired or invalid")
         if profile_r.status_code != 200:
-            raise HTTPException(status_code=401, detail="LIFF token invalid")
-        profile = profile_r.json()
-        # 簽發 HMAC session token（與 _verify_session_token 相容）
-        our_token = _make_session_token(
-            profile["userId"],
-            profile.get("displayName", ""),
-        )
-        return JSONResponse({
-            "token":   our_token,
-            "user_id": profile["userId"],
-            "name":    profile.get("displayName", ""),
-        })
+            raise HTTPException(
+                status_code=502,
+                detail=f"LINE profile API returned {profile_r.status_code}"
+            )
+
+        try:
+            profile = profile_r.json()
+            uid  = profile["userId"]
+            name = profile.get("displayName", "")
+        except Exception:
+            raise HTTPException(status_code=502, detail="LINE profile parse error")
+
+        our_token = _make_session_token(uid, name)
+        return JSONResponse({"token": our_token, "user_id": uid, "name": name})
 
     # ── LINE OAuth 模式（傳統）────────────────────────────
-    code = body.get("code")
+    code         = body.get("code")
     redirect_uri = body.get("redirect_uri")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing code")
 
     client_id     = os.environ.get("LINE_LOGIN_CHANNEL_ID", "")
     client_secret = os.environ.get("LINE_LOGIN_CHANNEL_SECRET", "")
-    print(f"[LineCallback] client_id={client_id[:4]}… redirect_uri={redirect_uri}")
+    print(f"[LineCallback/OAuth] client_id={client_id[:4]}… redirect_uri={redirect_uri}")
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.post(
-            "https://api.line.me/oauth2/v2.1/token",
-            data={
-                "grant_type":    "authorization_code",
-                "code":          code,
-                "redirect_uri":  redirect_uri,
-                "client_id":     client_id,
-                "client_secret": client_secret,
-            },
-        )
+    # Step 1: code → access_token
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            token_r = await client.post(
+                "https://api.line.me/oauth2/v2.1/token",
+                data={
+                    "grant_type":    "authorization_code",
+                    "code":          code,
+                    "redirect_uri":  redirect_uri,
+                    "client_id":     client_id,
+                    "client_secret": client_secret,
+                },
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="LINE token exchange timeout")
+    except httpx.RequestError as e:
+        print(f"[LineCallback/OAuth] token exchange network error: {e}")
+        raise HTTPException(status_code=502, detail="LINE API unreachable")
 
-    if r.status_code != 200:
-        err = r.text[:200]
-        print(f"[LineCallback] Token exchange failed {r.status_code}: {err}")
+    if token_r.status_code != 200:
+        err = token_r.text[:200]
+        print(f"[LineCallback/OAuth] Token exchange failed {token_r.status_code}: {err}")
         raise HTTPException(
             status_code=400,
-            detail=f"Token exchange failed: {r.status_code} {err}"
+            detail=f"Token exchange failed: {token_r.status_code}"
         )
 
-    access_token = r.json()["access_token"]
+    try:
+        access_token = token_r.json()["access_token"]
+    except Exception:
+        raise HTTPException(status_code=502, detail="LINE token parse error")
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        profile_r = await client.get(
-            "https://api.line.me/v2/profile",
-            headers={"Authorization": f"Bearer {access_token}"},
+    # Step 2: access_token → profile
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            profile_r = await client.get(
+                "https://api.line.me/v2/profile",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="LINE profile fetch timeout")
+    except httpx.RequestError as e:
+        print(f"[LineCallback/OAuth] profile fetch network error: {e}")
+        raise HTTPException(status_code=502, detail="LINE API unreachable")
+
+    if profile_r.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LINE profile API returned {profile_r.status_code}"
         )
-    profile = profile_r.json()
 
-    return JSONResponse({
-        "token":        access_token,
-        "user_id":      profile["userId"],
-        "display_name": profile.get("displayName", ""),
-    })
+    try:
+        profile = profile_r.json()
+        uid  = profile["userId"]
+        name = profile.get("displayName", "")
+    except Exception:
+        raise HTTPException(status_code=502, detail="LINE profile parse error")
+
+    # 簽發 HMAC session token，後續 API 呼叫不再需要打 LINE 端點
+    our_token = _make_session_token(uid, name)
+    return JSONResponse({"token": our_token, "user_id": uid, "name": name})
 
 
 # ── 環境變數 + 連線診斷 ──────────────────────────────────
@@ -539,26 +584,41 @@ async def get_conversations(
     user_id: str = Depends(get_current_user),
 ):
     """
-    取得用戶的完整對話紀錄（用於網站初次載入）
-    優先從 DB，fallback 到 in-process buffer
+    取得用戶的完整對話紀錄。
+    讀取順序（從快到慢）：
+      1. Redis buffer（Webhook 寫入後立即可見，解決 LIFF 0.5 秒競態）
+      2. PostgreSQL session_messages
+      3. In-process message_buffer（單進程最後防線）
     """
-    messages = []
+    messages: list = []
 
-    # 嘗試 DB（asyncpg / PostgreSQL）
+    # ── 層 1：Redis 即時緩衝（子秒級可見性）────────────────
+    # append_message 同步寫入，LIFF 開啟瞬間就能讀到 Webhook 剛寫的訊息
     try:
-        from services.db_persistent import get_pool
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT role, content, created_at
-                FROM session_messages
-                WHERE user_id = $1
-                ORDER BY created_at DESC
-                LIMIT $2
-                """,
-                user_id, limit
-            )
+        from services.redis_client import _client as _rclient
+        import json as _json
+        raw = await _rclient().lrange(f"conv:{user_id}", 0, limit - 1)
+        if raw:
+            messages = [_json.loads(m) for m in reversed(raw)]
+    except Exception:
+        pass
+
+    # ── 層 2：PostgreSQL 歷史紀錄（Redis 無資料時補齊）──────
+    if not messages:
+        try:
+            from services.db_persistent import get_pool
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT role, content, created_at
+                    FROM session_messages
+                    WHERE user_id = $1
+                    ORDER BY created_at DESC
+                    LIMIT $2
+                    """,
+                    user_id, limit
+                )
             messages = list(reversed([
                 {
                     "role":       r["role"],
@@ -567,15 +627,14 @@ async def get_conversations(
                 }
                 for r in rows
             ]))
-    except Exception as e:
-        print(f"[conversations] DB error: {e}")
+        except Exception as e:
+            print(f"[conversations] DB error: {e}")
 
-    # Fallback: in-process buffer
+    # ── 層 3：In-process buffer（DB 也沒有時的最後防線）─────
     if not messages:
         try:
             from services import message_buffer
-            msgs = message_buffer.get(user_id)
-            messages = msgs[-limit:]
+            messages = message_buffer.get(user_id)[-limit:]
         except Exception:
             pass
 
@@ -585,8 +644,10 @@ async def get_conversations(
 @app.get("/api/snapshot")
 async def get_snapshot(user_id: str = Depends(get_current_user)):
     """
-    本週即時快照 — 直接從 PostgreSQL 計算，不依賴 Redis
-    回傳格式與 weekly report 相容
+    本週即時快照 — 直接從 PostgreSQL 計算。
+    快取策略：
+      - 6h TTL 的 AI 考古摘要（存在 archives.stats.summary_cached_at）
+      - 用戶有新對話後，Redis snap_dirty:{user_id} 旗標會強制跳過快取重算
     """
     from datetime import date as _date, timedelta
     from services.weekly_scheduler import (
@@ -654,7 +715,15 @@ async def get_snapshot(user_id: str = Depends(get_current_user)):
                 user_id, week_id
             )
 
-        if cached and cached["summary"]:
+        # snap_dirty 旗標：用戶有新對話時由 append_message 設定
+        # 設定後強制跳過 6h TTL，確保 LIFF 看到最新一輪的考古摘要
+        try:
+            from services.redis_client import pop_snapshot_dirty
+            _is_dirty = await pop_snapshot_dirty(user_id)
+        except Exception:
+            _is_dirty = False
+
+        if cached and cached["summary"] and not _is_dirty:
             cs = dict(cached["stats"]) if cached["stats"] else {}
             try:
                 if now_ts - float(cs.get("summary_cached_at", 0)) < SUMMARY_TTL:

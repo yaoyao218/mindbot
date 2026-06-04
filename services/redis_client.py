@@ -138,6 +138,32 @@ async def set_last_sync(user_id: str, week_id: str) -> None:
     await r.set(f"last_sync:{user_id}", week_id, ex=SYNC_TTL)
 
 
+# ── 快照臟旗標（Cache Invalidation）────────────────────
+# 每次新訊息寫入後設定，迫使 /api/snapshot 跳過 6h AI 摘要快取
+
+SNAP_DIRTY_TTL = 30 * 60    # 30 分鐘：足夠等 LIFF 重整，不會永久殘留
+
+async def set_snapshot_dirty(user_id: str) -> None:
+    """新訊息/新對話後呼叫，標記該用戶的 snapshot 快取需重新生成"""
+    try:
+        r = _client()
+        await r.set(f"snap_dirty:{user_id}", "1", ex=SNAP_DIRTY_TTL)
+    except Exception:
+        pass   # Redis 不可用時靜默，不影響主流程
+
+async def pop_snapshot_dirty(user_id: str) -> bool:
+    """
+    原子讀取並刪除臟旗標（GETDEL）。
+    回傳 True  → 快取已過期，snapshot 應跳過 6h TTL 並重算。
+    回傳 False → 快取仍有效或 Redis 不可用。
+    """
+    try:
+        r = _client()
+        result = await r.getdel(f"snap_dirty:{user_id}")
+        return result is not None
+    except Exception:
+        return False   # 降級：視為乾淨，不強制重算
+
 # ── 分散式鎖（防 Race Condition）────────────────────────
 
 async def acquire_user_lock(user_id: str, ttl: int = LOCK_TTL) -> bool:
