@@ -7,7 +7,8 @@ import random
 import asyncio
 from linebot.v3.messaging import (
     MessagingApi, ReplyMessageRequest,
-    TextMessage, FlexMessage, FlexContainer
+    TextMessage, FlexMessage, FlexContainer,
+    QuickReply, QuickReplyItem, MessageAction, URIAction,
 )
 from linebot.v3.webhooks import MessageEvent
 
@@ -918,12 +919,20 @@ async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
         },
     }
 
+    welcome_quick_reply = QuickReply(items=[
+        QuickReplyItem(action=MessageAction(label="🛋️ 深度陪伴", text="🛋️ 進入深度陪伴")),
+        QuickReplyItem(action=MessageAction(label="🏃 快速宣洩", text="🏃 通勤打卡碎碎念")),
+        QuickReplyItem(action=MessageAction(label="📋 簽到", text="簽到")),
+        QuickReplyItem(action=MessageAction(label="📖 說明", text="說明")),
+    ])
+
     await line_bot_api.reply_message(
         ReplyMessageRequest(
             reply_token=reply_token,
             messages=[FlexMessage(
                 alt_text="很高興你在這裡 🌿",
-                contents=FlexContainer.from_dict(flex_content)
+                contents=FlexContainer.from_dict(flex_content),
+                quick_reply=welcome_quick_reply,
             )]
         )
     )
@@ -1011,6 +1020,13 @@ async def send_help(reply_token: str, line_bot_api: MessagingApi):
         ),
     ]
 
+    quick_reply = QuickReply(items=[
+        QuickReplyItem(action=MessageAction(label="🛋️ 深度陪伴", text="🛋️ 進入深度陪伴")),
+        QuickReplyItem(action=MessageAction(label="🏃 快速宣洩", text="🏃 通勤打卡碎碎念")),
+        QuickReplyItem(action=MessageAction(label="📋 簽到", text="簽到")),
+        QuickReplyItem(action=URIAction(label="📊 查看日記", uri=f"{APP_URL}#dashboard")),
+    ])
+
     await line_bot_api.reply_message(
         ReplyMessageRequest(
             reply_token=reply_token,
@@ -1021,6 +1037,7 @@ async def send_help(reply_token: str, line_bot_api: MessagingApi):
                         "type": "carousel",
                         "contents": cards,
                     }),
+                    quick_reply=quick_reply,
                 )
             ],
         )
