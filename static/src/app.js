@@ -5,7 +5,7 @@
 
 import { db, getSetting, setSetting }          from './db.js';
 import { renderDashboard }                     from './components/Dashboard.js';
-import { renderTarotBlind, initTarotCard }     from './components/TarotBlind.js';
+import { renderTarotFlip as renderTarotBlind, initTarotCard } from './components/tarot_flip.js';
 import { renderCalendar }                      from './components/CalendarView.js';
 import { renderTimeline, toggleLocalBackup }   from './components/Timeline.js';
 import { renderSettings, exportUserData }      from './components/Settings.js';
@@ -146,9 +146,9 @@ class AppController {
   }
 
   async _renderRoute(container, route) {
-    // 離開前清除 PsychBubble rAF，防止記憶體洩漏
-    window._mbPsychBubble?.destroy();
-    window._mbPsychBubble = null;
+    // 離開前清除 Canvas rAF，防止記憶體洩漏
+    window._mbPsychBubble?.destroy(); window._mbPsychBubble = null;
+    window._mbWaveChart?.destroy();   window._mbWaveChart   = null;
 
     // 骨架屏
     container.innerHTML = `

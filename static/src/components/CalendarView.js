@@ -1,11 +1,11 @@
 /**
- * CalendarView.js — 金色✦情緒月曆
+ * CalendarView.js — 金色✦情緒月曆 + 情緒潮汐波形
  *
  * 規格書實作：
  * - 日期格子帶 data-date 與 data-empty 屬性
- * - 全域點擊委派由 app.js 在 #app-runtime 統一監聽（不在此元件內綁定）
- * - dayData 為 null 時安全代入 dateStr，data-empty="true"，
- *   絕不傳入 undefined 給 Modal
+ * - 全域點擊委派由 app.js 在 #app-runtime 統一監聽
+ * - 月曆下方掛載 WaveChart 情緒潮汐圖（動態 import）
+ * - window._mbWaveChart 儲存實例，月份切換 / 路由離開前 destroy()
  */
 
 /**
@@ -58,6 +58,16 @@ export function renderCalendar(container, year, month, records = []) {
         <span class="text-amber-400 font-bold text-xs">✦</span>
         <span class="text-xs text-slate-500">有塔羅紀錄</span>
       </div>
+
+      <!-- 情緒潮汐波形（WaveChart 掛載點）-->
+      <div id="wave-chart-mount" class="mt-5">
+        <p class="text-xs text-slate-600 tracking-widest uppercase mb-2"
+           style="letter-spacing:.14em">本月情緒潮汐</p>
+        <div id="wave-chart-canvas-wrap"
+             style="width:100%;height:130px;border-radius:.875rem;overflow:hidden;
+                    background:rgba(7,11,20,.5);border:1px solid rgba(99,102,241,.08)">
+        </div>
+      </div>
     </div>`;
 
   // 月份切換按鈕（分派 month-change 事件給 app.js 監聽）
@@ -73,6 +83,47 @@ export function renderCalendar(container, year, month, records = []) {
       detail: { year: d.getFullYear(), month: d.getMonth() + 1 }, bubbles: true,
     }));
   });
+
+  // WaveChart：有記錄才渲染
+  _mountWaveChart(container, records);
+}
+
+/**
+ * 動態掛載 WaveChart 到 #wave-chart-canvas-wrap
+ * 使用 dynamic import 避免影響首屏載入速度
+ */
+async function _mountWaveChart(container, records) {
+  const wrap = container.querySelector('#wave-chart-canvas-wrap');
+  if (!wrap) return;
+
+  // 銷毀上一個實例（月份切換時）
+  window._mbWaveChart?.destroy();
+  window._mbWaveChart = null;
+
+  // 無資料時顯示空狀態文字，不建 Canvas
+  if (!records.length) {
+    wrap.innerHTML =
+      '<div style="height:100%;display:flex;align-items:center;justify-content:center">' +
+      '<span style="color:#334155;font-size:11px;letter-spacing:.12em">本月尚無情緒足跡</span>' +
+      '</div>';
+    return;
+  }
+
+  try {
+    const { WaveChart } = await import('./wave_chart.js');
+
+    // emotion_calendar records → WaveChart 格式（date 欄位名稱對齊）
+    const waveRecords = records.map(r => ({
+      date:          r.record_date,
+      emotion_emoji: r.emotion_emoji  || '',
+      arousal_level: r.arousal_level  ?? undefined,
+    }));
+
+    window._mbWaveChart = new WaveChart(wrap, { records: waveRecords });
+  } catch (e) {
+    console.warn('[CalendarView] WaveChart 載入失敗:', e);
+    wrap.innerHTML = '';   // 靜默降級，不顯示錯誤
+  }
 }
 
 function _buildCells(year, month, firstDay, daysInMo, recordMap, today) {
