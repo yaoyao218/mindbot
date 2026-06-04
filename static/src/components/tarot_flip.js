@@ -154,6 +154,7 @@ function _injectStyles() {
     position: relative; width: 100%; height: 100%;
     transform-style: preserve-3d;
     transition: transform .78s cubic-bezier(.25,.46,.45,.94);
+    will-change: transform;
   }
   .tf-inner.tf-flipped { transform: rotateY(180deg); }
 
@@ -162,7 +163,10 @@ function _injectStyles() {
     border-radius: 1.25rem;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
-    overflow: hidden;
+    /* overflow:hidden + 3D transform 在 WebKit 行動端會干擾 backface-visibility，
+       改用 clip-path 或直接不 clip — 內容已在 border-radius 內，視覺安全 */
+    overflow: clip;
+    transform: translateZ(0);
   }
 
   /* ── 卡背 ─────────────────────────────────────────── */
@@ -170,6 +174,7 @@ function _injectStyles() {
     background: linear-gradient(145deg, #0e1520 0%, #1a0f2e 50%, #0b1120 100%);
     border: 1.5px solid rgba(99,102,241,.25);
     box-shadow: inset 0 0 60px rgba(99,102,241,.07), 0 4px 24px rgba(0,0,0,.5);
+    transform: translateZ(0);
   }
 
   /* 旋轉彩虹光環（純 CSS）*/
@@ -257,11 +262,10 @@ function _injectStyles() {
 
   /* ── 卡面 ─────────────────────────────────────────── */
   .tf-front {
-    transform: rotateY(180deg);
-    /* 真實毛玻璃：backdrop-filter 對自身生效，需外層有內容可模糊 */
-    background: rgba(14, 21, 32, 0.7);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    transform: rotateY(180deg) translateZ(0.5px);
+    /* backdrop-filter 在 3D transform + backface-visibility 下於 WebKit 行動端
+       會穿透背面，改用不透明實底背景以確保正反面完全隔離。 */
+    background: rgba(12, 18, 30, 0.97);
     border: 1.5px solid rgba(245,158,11,.22);
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,.06),

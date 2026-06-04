@@ -64,6 +64,9 @@ export async function renderDashboard(container, weeklyData) {
       <!-- 洞察名言卡 -->
       ${_insightCard(weeklyData.psych_context || {})}
 
+      <!-- 心靈投射牌掛載點（_renderWeeklyTarotDock 動態填入）-->
+      <div id="weekly-tarot-mount"></div>
+
       <!-- 考古卡片掛載點（renderArchaeologyCard 動態填入）-->
       <div id="arch-mount"></div>
 
@@ -165,6 +168,10 @@ export async function renderDashboard(container, weeklyData) {
       },
     }
   );
+
+  // 心靈投射牌（有無塔羅資料皆渲染；無資料時改用週度大阿爾克那）
+  const tarotMount = document.getElementById('weekly-tarot-mount');
+  if (tarotMount) _renderWeeklyTarotDock(tarotMount, weeklyData.psych_context || {}, weeklyData.week_id).catch(() => {});
 
   // 考古卡片（有 archaeology / triad 才渲染，無資料時靜默跳過）
   const archMount = document.getElementById('arch-mount');
@@ -282,6 +289,61 @@ async function renderArchaeologyCard(mount, data) {
     mount.querySelector('.arch-bubble-wrap')?.remove();
     mount.querySelector('.arch-bubble-label')?.remove();
   }
+}
+
+/* ── 大阿爾克那牌池（週度心靈大局基調）────────────────
+ *  當用戶尚未觸發收尾塔羅時，依週別輪換一張大阿爾克那
+ *  作為潛意識背景提示，維持儀式感。
+ */
+const _MAJOR_ARCANA_POOL = [
+  { card_name: '隱者',   meaning: '此刻需要向內探索，外界的喧囂可以先放下。答案往往在安靜之中浮現。',   is_reversed: false },
+  { card_name: '月亮',   meaning: '潛意識的波濤正在湧現，夢境與直覺比理性更接近真相。',                  is_reversed: false },
+  { card_name: '星星',   meaning: '療癒正在悄悄進行，信任這個看不見結果的過程。',                        is_reversed: false },
+  { card_name: '力量',   meaning: '溫柔地面對自己，比強迫自己振作更需要勇氣。',                          is_reversed: false },
+  { card_name: '愚者',   meaning: '新的開始正在醞釀，此刻的未知是機遇的伏筆。',                          is_reversed: false },
+  { card_name: '審判',   meaning: '過去的一切正在召喚你誠實地面對，這是覺醒的開端。',                    is_reversed: false },
+  { card_name: '戰車',   meaning: '內在的衝突需要整合，找到前進的方向比速度更重要。',                    is_reversed: false },
+];
+
+async function _renderWeeklyTarotDock(mount, pc, weekId) {
+  if (!mount.isConnected) return;
+
+  const { renderTarotFlip } = await import('./tarot_flip.js');
+  if (!mount.isConnected) return;
+
+  // 有真實觸發牌 → 直接呈現
+  const hasRealCard = !!(pc.tarot_card || pc.tarot_name_zh);
+
+  let cardData;
+  if (hasRealCard) {
+    cardData = {
+      card_name:           pc.tarot_name_zh || pc.tarot_card,
+      meaning:             pc.tarot_meaning  || pc.dialogue_insight || '',
+      is_reversed:         pc.tarot_reversed || false,
+      defense_type:        pc.defense_type   || '',
+      projective_question: pc.projective_question || '',
+    };
+  } else {
+    // 無觸發牌 → 依週別 hash 選一張大阿爾克那
+    const seed = weekId
+      ? weekId.replace(/\D/g, '').split('').reduce((a, c) => a + +c, 0)
+      : new Date().getDay();
+    cardData = _MAJOR_ARCANA_POOL[seed % _MAJOR_ARCANA_POOL.length];
+  }
+
+  // 外層容器
+  mount.innerHTML = `
+    <div>
+      <p style="font-size:10px;letter-spacing:.16em;
+                color:rgba(245,158,11,.55);text-transform:uppercase;
+                margin-bottom:8px;padding:0 4px">
+        ✦ ${hasRealCard ? '本週心靈投射牌' : '當前心靈大局概況'}
+      </p>
+      <div id="wt-flip-inner"></div>
+    </div>`;
+
+  const inner = mount.querySelector('#wt-flip-inner');
+  if (inner) renderTarotFlip(inner, cardData);
 }
 
 /* ── 降級留白充電 UI ────────────────────────────────── */

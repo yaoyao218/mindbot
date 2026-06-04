@@ -75,22 +75,22 @@ export async function renderTimeline(container, snapData) {
 
       <!-- ▌左側 7/10：莫蘭迪對話留存 -->
       <div class="col-span-1 md:col-span-7 overflow-y-auto" id="timeline-scroll">
-        <div class="px-4 pt-5 pb-28">
+        <div class="px-5 md:px-8 pt-6 pb-32">
 
           <!-- 區塊標題 -->
-          <div class="flex items-center gap-2 mb-5">
-            <span style="font-size:9px;letter-spacing:.18em;color:rgba(99,102,241,.4);
-                         text-transform:uppercase;font-weight:500">✦ 時光機對話留存</span>
-            <div style="flex:1;height:1px;background:rgba(99,102,241,.06)"></div>
+          <div class="flex items-center gap-3 mb-6">
+            <span style="font-size:10px;letter-spacing:.18em;color:rgba(99,102,241,.6);
+                         text-transform:uppercase;font-weight:600">✦ 時光機對話留存</span>
+            <div style="flex:1;height:1px;background:rgba(99,102,241,.1)"></div>
           </div>
 
           <!-- 氣泡列表 -->
-          <div id="timeline-list" class="space-y-3"></div>
+          <div id="timeline-list" class="space-y-4"></div>
 
           <!-- IntersectionObserver 哨兵 -->
           <div id="timeline-sentinel"
                class="h-14 flex items-center justify-center">
-            <span class="animate-pulse" style="font-size:11px;color:#1e293b">讀取中…</span>
+            <span class="animate-pulse" style="font-size:12px;color:#334155">讀取中…</span>
           </div>
         </div>
       </div>
@@ -98,17 +98,17 @@ export async function renderTimeline(container, snapData) {
       <!-- ▌右側 3/10：潛意識氣泡看板（僅 md+ 顯示）-->
       <div id="subconscious-panel"
            class="hidden md:flex flex-col"
-           style="background:rgba(7,11,20,.78);
+           style="background:rgba(7,11,20,.82);
                   backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
-                  border-left:1px solid rgba(99,102,241,.07)">
+                  border-left:1px solid rgba(99,102,241,.12)">
 
         <!-- 看板標題 -->
-        <div class="px-4 pt-4 pb-2 flex-shrink-0">
-          <p style="font-size:9px;letter-spacing:.18em;
-                    color:rgba(99,102,241,.4);text-transform:uppercase">
+        <div class="px-5 pt-5 pb-3 flex-shrink-0">
+          <p style="font-size:10px;letter-spacing:.18em;
+                    color:rgba(99,102,241,.65);text-transform:uppercase;font-weight:600">
             潛意識生態系
           </p>
-          <p style="font-size:10px;color:#1e293b;margin-top:3px">心理模式即時流體圖</p>
+          <p style="font-size:11px;color:#475569;margin-top:4px">心理模式即時流體圖</p>
         </div>
 
         <!-- Canvas 佔位 -->
@@ -120,20 +120,20 @@ export async function renderTimeline(container, snapData) {
           <!-- 空態：無 triad 資料時顯示 -->
           <div id="psych-empty-hint"
                style="position:absolute;inset:0;display:flex;flex-direction:column;
-                      align-items:center;justify-content:center;padding:24px;
+                      align-items:center;justify-content:center;padding:28px;
                       text-align:center;pointer-events:none">
-            <span style="font-size:2.5rem;opacity:.12;margin-bottom:14px">🌊</span>
-            <p style="color:#1e293b;font-size:11px;line-height:1.7">
+            <span style="font-size:2.5rem;opacity:.18;margin-bottom:16px">🌊</span>
+            <p style="color:#475569;font-size:12px;line-height:1.8">
               完成一次深度對話後，<br>心理模式氣泡將<br>在此漂浮呼吸
             </p>
           </div>
         </div>
 
         <!-- 底部：週期標籤 -->
-        <div class="px-3 py-2 flex-shrink-0"
-             style="border-top:1px solid rgba(15,23,42,.9)">
+        <div class="px-4 py-3 flex-shrink-0"
+             style="border-top:1px solid rgba(30,41,59,.8)">
           <p id="psych-panel-week"
-             style="font-size:9px;color:#1e293b;text-align:center;letter-spacing:.1em">
+             style="font-size:10px;color:#475569;text-align:center;letter-spacing:.1em">
           </p>
         </div>
       </div>
@@ -209,15 +209,15 @@ function _buildBubble(msg, prevMsg) {
     // 用戶氣泡：右對齊，煙燻藍毛玻璃
     wrap.className = 'flex justify-end';
     wrap.innerHTML = `
-      <div style="max-width:72%;
-                  background:rgba(124,154,181,.14);
+      <div style="max-width:75%;
+                  background:rgba(124,154,181,.18);
                   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-                  border:1px solid rgba(124,154,181,.22);
+                  border:1px solid rgba(124,154,181,.28);
                   border-radius:18px 18px 4px 18px;
-                  padding:10px 14px">
-        <p style="font-size:13px;color:#cbd5e1;line-height:1.65">${content}</p>
-        <span style="font-size:10px;color:#334155;display:block;
-                     text-align:right;margin-top:4px">${timeStr}</span>
+                  padding:12px 16px">
+        <p style="font-size:15px;color:rgba(255,255,255,.88);line-height:1.7">${content}</p>
+        <span style="font-size:10px;color:#475569;display:block;
+                     text-align:right;margin-top:5px">${timeStr}</span>
       </div>`;
   } else {
     // AI 氣泡：左對齊，深灰毛玻璃 + 防衛色調 + 臨床標籤
@@ -225,15 +225,17 @@ function _buildBubble(msg, prevMsg) {
 
     const bubbleBg = defense
       ? `background:${defense.bg};border:1px solid ${defense.border}`
-      : 'background:rgba(14,21,32,.65);border:1px solid rgba(99,102,241,.09)';
+      : 'background:rgba(14,21,32,.8);border:1px solid rgba(99,102,241,.14)';
 
+    // 防衛標籤：提高對比度（chip 顏色基礎不變，但確保可讀）
     const defenseChip = defense ? `
-      <div style="display:inline-block;margin-bottom:5px;
-                  padding:2px 10px;border-radius:20px;
+      <div style="display:inline-block;margin-bottom:7px;
+                  padding:3px 12px;border-radius:20px;
+                  background:rgba(0,0,0,.25);
                   border:1px solid ${defense.chip};
                   font-family:'Noto Serif TC',Georgia,serif;
-                  font-size:9px;letter-spacing:.06em;color:${defense.chip}">
-        [ ${defense.label} ]
+                  font-size:10px;letter-spacing:.06em;color:${defense.chip}">
+        ${defense.label}
       </div><br>` : '';
 
     wrap.className = 'flex justify-start';
@@ -242,16 +244,16 @@ function _buildBubble(msg, prevMsg) {
                   ${bubbleBg};
                   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
                   border-radius:18px 18px 18px 4px;
-                  padding:10px 14px">
+                  padding:12px 16px">
         <div style="font-family:'Noto Serif TC',Georgia,serif;
-                    font-size:9px;letter-spacing:.08em;
-                    color:rgba(99,102,241,.38);margin-bottom:5px">
-          [ 系統動態：進入情感共鳴 Rapport 模式 ]
+                    font-size:10px;letter-spacing:.08em;
+                    color:rgba(99,102,241,.65);margin-bottom:6px">
+          ✦ 情感共鳴模式
         </div>
         ${defenseChip}
-        <p style="font-size:13px;color:#94a3b8;line-height:1.65">${content}</p>
-        <span style="font-size:10px;color:#1e293b;display:block;
-                     text-align:right;margin-top:4px">${timeStr}</span>
+        <p style="font-size:15px;color:#cbd5e1;line-height:1.72">${content}</p>
+        <span style="font-size:10px;color:#475569;display:block;
+                     text-align:right;margin-top:5px">${timeStr}</span>
       </div>`;
   }
 
