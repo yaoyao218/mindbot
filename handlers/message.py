@@ -173,15 +173,21 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     reply_token = event.reply_token
 
     # ── 關鍵字路由 ────────────────────────────────────────
-    if any(kw in text.lower() for kw in CHECKIN_KEYWORDS):
+    # 精確比對用（去首尾空白後的完整訊息）
+    _t = text.lower().strip()
+
+    # 簽到：子字串比對（「簽到」不易誤觸）
+    if any(kw in _t for kw in CHECKIN_KEYWORDS):
         await send_checkin_flex(reply_token, line_bot_api)
         return
 
-    if any(kw in text.lower() for kw in START_KEYWORDS):
+    # 開始/打招呼：【精確比對】防止「你好，我想問...」誤觸歡迎卡片
+    if _t in {kw.lower() for kw in START_KEYWORDS}:
         await send_welcome(reply_token, line_bot_api)
         return
 
-    if any(kw in text.lower() for kw in HELP_KEYWORDS):
+    # 說明/幫助：【精確比對】防止「請說明一下」誤觸說明卡片
+    if _t in {kw.lower() for kw in HELP_KEYWORDS}:
         await send_help(reply_token, line_bot_api)
         return
 
@@ -189,7 +195,7 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
         await send_website_link(reply_token, line_bot_api)
         return
 
-    if any(kw in text.lower() for kw in LOGIN_KEYWORDS):
+    if any(kw in _t for kw in LOGIN_KEYWORDS):
         await send_login_link(user_id, reply_token, line_bot_api)
         return
 
