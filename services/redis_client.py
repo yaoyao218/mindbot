@@ -117,6 +117,16 @@ async def set_weekly_report_cache(
     )
 
 
+async def delete_weekly_report_cache(user_id: str, week_id: str) -> None:
+    """
+    刪除指定週報的 Redis 快取。
+    在 /api/snapshot 重新生成考古報告並儲存到 PostgreSQL 後呼叫，
+    確保下次 /api/sync/weekly 拉取到新版而非舊快照。
+    """
+    r = _client()
+    await r.delete(f"weekly:{user_id}:{week_id}")
+
+
 async def list_cached_weekly(user_id: str) -> list[str]:
     """列出 Redis 中該用戶所有有快取的 week_id（已排序）。"""
     r = _client()

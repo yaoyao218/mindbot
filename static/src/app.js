@@ -10,6 +10,7 @@ import { renderCalendar }                      from './components/CalendarView.j
 import { renderTimeline, toggleLocalBackup }   from './components/Timeline.js';
 import { renderSettings, exportUserData }      from './components/Settings.js';
 import { renderWelcomeModal }                  from './components/WelcomeModal.js';
+import { PsychBubble }                         from './components/psych_bubble.js';
 
 class AppController {
   constructor() {
@@ -269,33 +270,97 @@ class AppController {
 
   _openDetailModal(dateStr) {
     if (!dateStr) return;
+
+    // Tear down any lingering bubble from a previously opened modal
+    window._modalPsychBubble?.destroy();
+    window._modalPsychBubble = null;
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="modal-sheet">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-glow-text font-semibold">${dateStr}</h3>
-          <button class="close-modal text-slate-500 text-xl">×</button>
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="text-glow-text font-semibold"
+              style="font-family:'Noto Serif TC',serif">${dateStr}</h3>
+          <button class="close-modal text-slate-500 text-xl leading-none">×</button>
         </div>
         <div class="modal-body">
           <div class="skeleton h-20 rounded-xl mb-3"></div>
         </div>
       </div>`;
-    overlay.querySelector('.close-modal').onclick = () => overlay.remove();
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    const closeModal = () => {
+      window._modalPsychBubble?.destroy();
+      window._modalPsychBubble = null;
+      overlay.remove();
+    };
+
+    overlay.querySelector('.close-modal').onclick = closeModal;
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
     document.body.appendChild(overlay);
 
     this._api(`/api/daily-record?date=${dateStr}`).then(data => {
       const mc = overlay.querySelector('.modal-body');
-      if (!data || data.error) {
+      if (!data || data.error || !data.found) {
         mc.innerHTML = '<p class="text-slate-500 text-sm text-center py-4">這天還沒有紀錄</p>';
         return;
       }
+
+      // Synthesise a minimal triad from emotion_label for the bubble field
+      const triad = data.emotion_label
+        ? { emotion: [{ label: data.emotion_label, value: 72 }], cognition: [], need: [] }
+        : { emotion: [], cognition: [], need: [] };
+
+      // Glass-glow state tag
+      const stateTag = data.emotion_label ? `
+        <div style="display:inline-flex;align-items:center;gap:6px;
+                    background:var(--glass-bg,rgba(99,102,241,.12));
+                    border:1px solid rgba(99,102,241,.35);border-radius:20px;
+                    padding:4px 14px;backdrop-filter:blur(8px);
+                    -webkit-backdrop-filter:blur(8px);
+                    box-shadow:0 0 12px rgba(99,102,241,.2);
+                    color:#a5b4fc;font-size:11px;font-weight:600;
+                    letter-spacing:.08em;white-space:nowrap">
+          ${data.emotion_emoji || ''} ${data.emotion_label}
+        </div>` : '';
+
       mc.innerHTML = `
-        ${data.emotion_emoji ? `<div class="text-4xl text-center mb-3">${data.emotion_emoji}</div>` : ''}
-        ${data.emotion_label ? `<p class="text-xs text-slate-500 text-center mb-3">${data.emotion_label}</p>` : ''}
-        ${data.tarot_card    ? `<div class="text-xs text-amber-400 border border-amber-500/20 rounded-full px-3 py-1 inline-flex mb-3">🔮 ${data.tarot_card}</div>` : ''}
-        ${data.daily_narrative ? `<p class="text-slate-300 text-sm leading-relaxed">${data.daily_narrative}</p>` : ''}`;
+        <!-- 一日微型氣泡場 -->
+        <div style="width:100%;height:160px;position:relative;margin-bottom:10px;
+                    border-radius:.875rem;overflow:hidden;
+                    background:rgba(7,11,20,.5);
+                    border:1px solid rgba(99,102,241,.08)">
+          <canvas id="modal-psych-canvas" style="width:100%;height:100%;display:block"></canvas>
+        </div>
+
+        <!-- 心理狀態毛玻璃發光標籤 -->
+        ${stateTag ? `<div style="text-align:center;margin-bottom:14px">${stateTag}</div>` : ''}
+
+        <!-- 3D 塔羅翻牌 -->
+        ${data.tarot_card ? '<div id="modal-tarot-container" class="mb-3"></div>' : ''}
+
+        <!-- 每日敘述 -->
+        ${data.daily_narrative
+          ? `<p class="text-slate-300 text-sm leading-relaxed"
+                  style="font-family:'Noto Serif TC',serif;margin-top:4px"
+             >${data.daily_narrative}</p>`
+          : ''}`;
+
+      // Mount PsychBubble on canvas
+      const canvas = mc.querySelector('#modal-psych-canvas');
+      if (canvas) {
+        window._modalPsychBubble = new PsychBubble(canvas, triad);
+      }
+
+      // Mount TarotFlip
+      const tarotWrap = mc.querySelector('#modal-tarot-container');
+      if (tarotWrap) {
+        renderTarotBlind(tarotWrap, {
+          card_name:   data.tarot_card,
+          meaning:     data.tarot_meaning  || '',
+          is_reversed: data.tarot_reversed || false,
+        });
+      }
     }).catch(() => {
       overlay.querySelector('.modal-body').innerHTML =
         '<p class="text-slate-500 text-sm text-center py-4">載入失敗</p>';

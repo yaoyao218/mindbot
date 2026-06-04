@@ -774,6 +774,14 @@ async def get_snapshot(user_id: str = Depends(get_current_user)):
             except Exception as e:
                 print(f"[snapshot] save_archive failed: {e}")
 
+            # 驅逐對應的週報 Redis 快取：新考古摘要已寫入 PostgreSQL，
+            # 確保手機端 /api/sync/weekly 下次拉取到新版，而非命中 30 天舊快取。
+            try:
+                from services.redis_client import delete_weekly_report_cache
+                await delete_weekly_report_cache(user_id, week_id)
+            except Exception:
+                pass
+
         # ── 本週代表牌 + psych_context ──────────────────────
         week_tarot     = None
         week_end_quote = None

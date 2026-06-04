@@ -398,6 +398,32 @@ body {
   color: rgba(196,165,90,.65); margin-top: 8px; letter-spacing: .06em;
 }
 
+/* ── 響應式寬螢幕防禦：所有內容居中收攏 ─────── */
+/* 手機端：全寬無感；桌面端：優雅居中，維持沉浸美學 */
+.app-width-guard {
+  max-width: 680px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+#app-runtime {
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── 電腦端字體增強（>= 680px 容器寬度以上才作用）─── */
+/* 手機：固定 px 保持精緻；桌面：寬螢幕閱讀適當放大   */
+@media (min-width: 680px) {
+  .arch-summary    { font-size: 16px; line-height: 1.9; }
+  .arch-layer-text { font-size: 13px; line-height: 1.75; }
+  .arch-arc-text   { font-size: 12px; line-height: 1.7; }
+  .arch-quote-text { font-size: 14px; line-height: 1.85; }
+  .arch-growth-text{ font-size: 13px; }
+  /* Modal 內的敘述文字 */
+  .modal-sheet p.text-sm { font-size: 15px; line-height: 1.8; }
+}
+
 /* ── 頂部標題欄 ──────────────────────────────── */
 #app-header {
   position: sticky; top: 0; z-index: 40;
@@ -428,15 +454,17 @@ body {
 <div id="app-screen" style="display:none;position:relative;z-index:1">
 
   <!-- 頂部標題欄 -->
-  <header id="app-header" class="px-4 py-3 flex items-center justify-between">
-    <div class="flex items-center gap-2.5">
-      <span style="font-size:18px;filter:drop-shadow(0 0 8px rgba(99,102,241,.5))">🌿</span>
-      <span style="font-size:15px;font-weight:600;color:#e2e8f0;letter-spacing:.05em">心事日記</span>
-    </div>
-    <div class="flex items-center gap-1.5">
-      <div class="w-1.5 h-1.5 rounded-full bg-emerald-400/50"
-           style="box-shadow:0 0 6px rgba(52,211,153,.6)"></div>
-      <span id="sync-label" style="font-size:11px;color:#475569">同步中…</span>
+  <header id="app-header">
+    <div class="app-width-guard px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <span style="font-size:18px;filter:drop-shadow(0 0 8px rgba(99,102,241,.5))">🌿</span>
+        <span style="font-size:15px;font-weight:600;color:#e2e8f0;letter-spacing:.05em">心事日記</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <div class="w-1.5 h-1.5 rounded-full bg-emerald-400/50"
+             style="box-shadow:0 0 6px rgba(52,211,153,.6)"></div>
+        <span id="sync-label" style="font-size:11px;color:#475569">同步中…</span>
+      </div>
     </div>
   </header>
 

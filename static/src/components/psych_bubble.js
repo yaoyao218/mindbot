@@ -40,15 +40,11 @@ const MORANDI = {
   ],
 };
 
-// ── 三個引力井的角度（等邊三角形佈局）───────────────────
-//   emotion   → 頂部  (270°)
-//   cognition → 右下  (30°)
-//   need      → 左下  (150°)
-const WELL_ANGLES = {
-  emotion:   (270 * Math.PI) / 180,
-  cognition: (30  * Math.PI) / 180,
-  need:      (150 * Math.PI) / 180,
-};
+// ── 引力井：以邏輯畫布百分比定位（等腰三角形）─────────
+//   emotion   → 頂中  (50%, 25%)
+//   cognition → 右下  (75%, 75%)
+//   need      → 左下  (25%, 75%)
+// 相較極座標方案，百分比在任意長寬比下都精準對齊。
 
 // ── 物理常數 ─────────────────────────────────────────────
 const GRAVITY_K  = 0.009;   // 引力強度
@@ -77,36 +73,51 @@ export class PsychBubble {
     this._startLoop();
   }
 
-  // ── 畫布尺寸同步 ─────────────────────────────────────
+  // ── 畫布尺寸同步（含 DPR 高清渲染）────────────────────
   _resize() {
     const parent = this.canvas.parentElement;
+    // 邏輯像素（CSS px）— 物理引擎全程使用邏輯尺寸
     const W = parent?.offsetWidth  || 360;
     const H = parent?.offsetHeight || 280;
-    this.canvas.width  = W;
-    this.canvas.height = H;
+
+    // 限制 DPR 最高 2x（避免 3x 設備浪費 GPU 記憶體）
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    // 設定 canvas 物理像素；設定 width/height 會自動重置 ctx 狀態
+    this.canvas.width  = Math.round(W * dpr);
+    this.canvas.height = Math.round(H * dpr);
+    // CSS 顯示尺寸仍用邏輯像素，防止畫面被拉伸
+    this.canvas.style.width  = W + 'px';
+    this.canvas.style.height = H + 'px';
+    // 縮放 ctx 使後續所有繪圖指令以邏輯座標工作
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // 儲存邏輯尺寸（物理引擎 & 渲染均使用這兩個值）
+    this.W  = W;
+    this.H  = H;
     this.cx = W / 2;
     this.cy = H / 2;
 
-    // 引力井位置：以中心為圓心，半徑 = min(W,H)*0.28
-    const wellR = Math.min(W, H) * 0.28;
-    for (const [cat, angle] of Object.entries(WELL_ANGLES)) {
-      this._wells[cat] = {
-        x: this.cx + Math.cos(angle) * wellR,
-        y: this.cy + Math.sin(angle) * wellR,
-      };
-    }
+    // 引力井：百分比笛卡兒座標，在任意長寬比下精準對齊
+    this._wells = {
+      emotion:   { x: W * 0.50, y: H * 0.25 },
+      cognition: { x: W * 0.75, y: H * 0.75 },
+      need:      { x: W * 0.25, y: H * 0.75 },
+    };
 
-    // 重繪已有氣泡的引力目標（保持相對位置合理）
+    // 氣泡半徑縮放係數：讓氣泡在手機和大螢幕上都顯示合宜
+    // 基準面積 360px，上限 1.4（防止寬螢幕氣泡過大）
+    this._scale = Math.min(Math.max(Math.min(W, H) / 360, 0.55), 1.4);
+
     if (this.bubbles.length) this._adjustBubblesOnResize();
   }
 
   _adjustBubblesOnResize() {
     for (const b of this.bubbles) {
-      const w = this._wells[b.category];
-      if (!w) continue;
-      // 若氣泡超出畫布，推回安全區域
-      b.x = Math.max(b.r, Math.min(this.canvas.width  - b.r, b.x));
-      b.y = Math.max(b.r, Math.min(this.canvas.height - b.r, b.y));
+      if (!this._wells[b.category]) continue;
+      // 用邏輯尺寸（非 canvas 物理像素）把氣泡推回安全區域
+      b.x = Math.max(b.r, Math.min(this.W - b.r, b.x));
+      b.y = Math.max(b.r, Math.min(this.H - b.r, b.y));
     }
   }
 
@@ -121,7 +132,7 @@ export class PsychBubble {
       const well   = this._wells[cat] || { x: this.cx, y: this.cy };
 
       items.forEach((item, i) => {
-        const r      = _valueToRadius(item.value);
+        const r      = _valueToRadius(item.value, this._scale ?? 1);
         const spread = 40 + r;
         const angle  = (i / Math.max(items.length, 1)) * Math.PI * 2;
 
@@ -156,8 +167,8 @@ export class PsychBubble {
 
   // ── 物理更新 ─────────────────────────────────────────
   _physics() {
-    const W = this.canvas.width;
-    const H = this.canvas.height;
+    const W = this.W || this.canvas.width;
+    const H = this.H || this.canvas.height;
 
     // 淡入 + 個體運動
     for (const b of this.bubbles) {
@@ -214,8 +225,9 @@ export class PsychBubble {
   // ── 渲染 ─────────────────────────────────────────────
   _render() {
     const ctx = this.ctx;
-    const W   = this.canvas.width;
-    const H   = this.canvas.height;
+    // 始終用邏輯尺寸清除畫布（ctx 已被 setTransform 縮放至邏輯座標空間）
+    const W   = this.W || this.canvas.width;
+    const H   = this.H || this.canvas.height;
 
     ctx.clearRect(0, 0, W, H);
 
@@ -351,9 +363,9 @@ function _drawBubble(ctx, b) {
 }
 
 // ── 工具函式 ─────────────────────────────────────────────
-function _valueToRadius(value) {
-  // value 0-100 → radius 18-52
-  return 18 + (Math.min(100, Math.max(0, value)) / 100) * 34;
+function _valueToRadius(value, scale = 1) {
+  // value 0-100 → base radius 18–52px, then scaled by device/canvas coefficient
+  return (18 + (Math.min(100, Math.max(0, value)) / 100) * 34) * scale;
 }
 
 function _wellHintColor(cat) {
