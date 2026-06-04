@@ -194,6 +194,47 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
     session = await get_session(user_id)
     _in_dialog = session.get("in_dialog", False)
 
+    # ── 選單脈絡跳轉：物理重置 Session，防止舊脈絡污染新對話 ──
+    # 必須在所有其他路由之前處理，否則帶著 alliance_rupture / history 進主流程
+    if text == "🪐 靜心深度傾聽":
+        session["history"] = []
+        session["in_dialog"] = True
+        session["current_context"] = "deep"
+        session["psych"] = {
+            "current_context": "deep",
+            "alliance_rupture": None,
+            "rupture_repair_cooldown": 0,
+            "defense_mechanism": None,
+            "method": "Initial",
+        }
+        await save_session(user_id, session)
+        await _reply(
+            reply_token,
+            "想給自己一段安靜的時間，好好傾聽內心。\n\n現在，你調整到舒服的姿勢了嗎？感覺如何？",
+            line_bot_api,
+        )
+        return
+
+    if text == "🏃 通勤打卡碎碎念":
+        session["history"] = []
+        session["in_dialog"] = True
+        session["current_context"] = "quick"
+        session["quick_closed"] = False
+        session["psych"] = {
+            "current_context": "quick",
+            "alliance_rupture": None,
+            "rupture_repair_cooldown": 0,
+            "defense_mechanism": None,
+            "method": "Initial",
+        }
+        await save_session(user_id, session)
+        await _reply(
+            reply_token,
+            "好，說吧，三句話以內——今天最煩的是什麼？",
+            line_bot_api,
+        )
+        return
+
     # ── 關鍵字路由 ────────────────────────────────────────
     # 精確比對用（去首尾空白後的完整訊息）
     _t = text.lower().strip()
@@ -945,10 +986,10 @@ async def send_help(reply_token: str, line_bot_api: MessagingApi):
 
     cards = [
         _card(
-            "🛌", "啟動深度對話",
-            "最近心裡很亂？傳送「睡前安靜聊聊」，我會放慢步調，啟動長對話陪伴，引導你梳理內心的小劇場，並在收尾時為你抽出心靈投射卡片。",
-            "開啟深度對話",
-            {"type": "message", "label": "開啟深度對話", "text": "🛌 睡前安靜聊聊"},
+            "🪐", "靜心深度傾聽",
+            "想給自己一段安靜的時間傾聽內心？傳送「靜心深度傾聽」，無論何時，我都會放慢步調，陪你梳理心裡的小劇場，並在收尾時為你抽出心靈投射卡片。",
+            "進入靜心深度傾聽",
+            {"type": "message", "label": "進入靜心深度傾聽", "text": "🪐 靜心深度傾聽"},
         ),
         _card(
             "🏃", "快速心情宣洩",
