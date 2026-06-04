@@ -187,6 +187,27 @@ elif arousal_level >= 4:
 
 ---
 
+---
+
+### 2026-06-04 臨床過度修正優化（第二案 Hotfix）
+
+**驗證案例**：個案從平靜轉為急性緊張（等一下要報告），AI 連續輸出「嗯，你說的這些我都在聽著」進行純受器複讀，且在用戶詢問「要怎麼做」時，臨床診斷大腦誤判為同盟破裂（WITHDRAWAL），觸發 Rupture Repair 道歉模式。
+
+**修復方案**：
+
+#### 1. 封印複讀機萬用句（`services/companion.py`）
+`SUPPORTIVE_REFLECTION_SYSTEM` 加入「核心禁令」區塊：
+- 嚴禁「我都在聽著」「嗯，我聽到了」「原來是這樣」等零情感溫度的敷衍句
+- 嚴禁逐字列舉或複述用戶過去多輪發言，強制聚焦當前最新一句
+- 強制執行「感官動態重組（Dynamic Paraphrasing）」：把用戶的身體感官詞彙揉合進溫暖口語句
+
+#### 2. 阻斷破裂誤判（`services/clinical_diagnosis.py`）
+新增 `_HELP_SEEKING_SIGNALS`（10 組求救關鍵字：怎麼辦、救我、撐不住…），
+在 `diagnose()` 取得 AI 評估結果後，若 `alliance_rupture != "NONE"` 且命中求救訊號，強制覆寫為 `"NONE"`。
+這些關鍵字屬於三階層處方箋的觸發點（Level 1/2/3），不應觸發 Rupture Repair 道歉模式。
+
+---
+
 ## 變更影響範圍
 
 | 檔案 | 變更類型 |

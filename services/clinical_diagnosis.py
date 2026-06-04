@@ -95,6 +95,13 @@ _DIAGNOSE_SYSTEM = """# Role
 }"""
 
 
+# 求救訊號白名單：這些是情緒求助，不是同盟破裂，必須阻斷 alliance_rupture 誤判
+_HELP_SEEKING_SIGNALS = (
+    "怎麼辦", "該怎麼辦", "怎麼做", "救我", "如何是好",
+    "不知道該怎麼", "沒辦法了", "撐不住", "撐不下去", "幫幫我",
+)
+
+
 async def diagnose(
     user_text: str,
     history: list[dict],
@@ -128,10 +135,17 @@ async def diagnose(
         parsed = json.loads(raw)
         arousal = int(parsed.get("arousal_level", 3))
         referral_prob = {1: 0.1, 2: 0.3, 3: 0.3, 4: 0.6, 5: 1.0}.get(arousal, 0.3)
+
+        # 語意隔離：求救訊號（怎麼辦/救我）不是破裂，強制覆寫為 NONE
+        # 這些關鍵字應觸發三階層處方箋分流，而非 Rupture Repair 道歉模式
+        rupture = parsed.get("alliance_rupture", "NONE")
+        if rupture != "NONE" and any(sig in user_text for sig in _HELP_SEEKING_SIGNALS):
+            rupture = "NONE"
+
         return DiagnosisResult(
             arousal_level=arousal,
             defense_mechanism=parsed.get("defense_mechanism", "NONE"),
-            alliance_rupture=parsed.get("alliance_rupture", "NONE"),
+            alliance_rupture=rupture,
             referral_probability=referral_prob,
             notes=parsed.get("notes", "")
         )
