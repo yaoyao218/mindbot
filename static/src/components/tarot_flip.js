@@ -21,8 +21,12 @@ export function renderTarotFlip(container, tarotData) {
     container.innerHTML = `
       <div class="mx-4 my-2 p-5 rounded-2xl text-center"
            style="border:1px dashed rgba(245,158,11,.2);background:rgba(120,70,0,.06)">
-        <p style="color:rgba(245,158,11,.5);font-size:13px">本週尚未偵測到潛意識盲點</p>
-        <p style="color:#334155;font-size:11px;margin-top:4px">繼續在 LINE 傾訴，AI 將持續觀察心理模式</p>
+        <div style="font-size:2rem;margin-bottom:8px;opacity:.4">🔮</div>
+        <p style="color:rgba(245,158,11,.6);font-size:13px;font-weight:500">心靈投射牌尚未出現</p>
+        <p style="color:#475569;font-size:11px;margin-top:6px;line-height:1.6">
+          完成一次深度對話並說出收尾語（例如「晚安」、「先這樣」），<br>
+          AI 將為你抽出本週的潛意識盲點投射牌 ✦
+        </p>
       </div>`;
     return;
   }

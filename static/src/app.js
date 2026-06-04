@@ -184,17 +184,16 @@ class AppController {
     }
     renderDashboard(container, snapData);
 
-    // 若有塔羅盲點資料，追加翻牌元件
-    const pc = snapData?.psych_context;
-    if (pc?.tarot_card) {
-      const tarotWrap = document.createElement('div');
-      container.appendChild(tarotWrap);
-      renderTarotBlind(tarotWrap, {
-        card_name:           pc.tarot_name_zh || pc.tarot_card,
-        meaning:             pc.tarot_meaning || '',
-        projective_question: pc.dialogue_insight || '',
-      });
-    }
+    // 塔羅盲點翻牌元件：有資料顯示牌面，無資料顯示「尚未偵測」引導提示
+    // 無論有無資料都渲染，確保功能可被發現
+    const pc = snapData?.psych_context || {};
+    const tarotWrap = document.createElement('div');
+    container.appendChild(tarotWrap);
+    renderTarotBlind(tarotWrap, pc.tarot_card ? {
+      card_name:           pc.tarot_name_zh || pc.tarot_card,
+      meaning:             pc.tarot_meaning || '',
+      projective_question: pc.dialogue_insight || '',
+    } : null);   // null → tarot_flip.js 顯示「尚未偵測到潛意識盲點」空態
   }
 
   /* ── Calendar ────────────────────────────────── */

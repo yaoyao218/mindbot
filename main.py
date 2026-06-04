@@ -800,22 +800,48 @@ async def get_snapshot(user_id: str = Depends(get_current_user)):
                        ORDER BY created_at DESC LIMIT 1""",
                     user_id, mon
                 )
-            if pc_row:
-                week_end_quote = pc_row["end_quote"]
-                tarot_key      = pc_row["tarot_card"]
-                tarot_name     = None
-                if tarot_key:
-                    try:
-                        from services.tarot_quotes_pool import TAROT_POOL
-                        tarot_name = TAROT_POOL.get(tarot_key, {}).get("name_zh")
-                    except Exception:
-                        pass
+                # psych_insights 是收尾 SummaryModule 的資料來源（tarot_card_name 更完整）
+                pi_row = await conn.fetchrow(
+                    """SELECT tarot_card_name, tarot_insight, dialogue_insight,
+                              end_quote, quote_author
+                       FROM psych_insights
+                       WHERE user_id=$1 AND created_at::date >= $2
+                       ORDER BY created_at DESC LIMIT 1""",
+                    user_id, mon
+                )
+
+            # 決定最終塔羅來源：psych_insights 優先（收尾牌），fallback session_psych
+            tarot_key  = None
+            tarot_name = None
+            tarot_meaning = None
+            if pi_row and pi_row["tarot_card_name"]:
+                tarot_key = pi_row["tarot_card_name"]
+                tarot_meaning = pi_row.get("tarot_insight", "")
+            elif pc_row and pc_row["tarot_card"]:
+                tarot_key = pc_row["tarot_card"]
+
+            if tarot_key:
+                try:
+                    from services.tarot_quotes_pool import TAROT_POOL
+                    card_data  = TAROT_POOL.get(tarot_key, {})
+                    tarot_name = card_data.get("name_zh")
+                    if not tarot_meaning:
+                        tarot_meaning = card_data.get("meaning", "")
+                except Exception:
+                    pass
+
+            # 彙整 psych_context（以 psych_insights 優先）
+            if pi_row or pc_row:
+                src = pi_row or pc_row
+                week_end_quote = src.get("end_quote") if src else None
                 psych_context = {
-                    "dialogue_insight": pc_row["dialogue_insight"],
+                    "dialogue_insight": (pi_row or {}).get("dialogue_insight")
+                                        or (pc_row or {}).get("dialogue_insight"),
                     "tarot_card":       tarot_key,
                     "tarot_name_zh":    tarot_name,
-                    "end_quote":        pc_row["end_quote"],
-                    "quote_author":     pc_row["quote_author"],
+                    "tarot_meaning":    tarot_meaning,
+                    "end_quote":        week_end_quote,
+                    "quote_author":     src.get("quote_author") if src else None,
                 }
         except Exception:
             pass

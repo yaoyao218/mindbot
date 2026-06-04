@@ -492,7 +492,12 @@ async def _handle_message_inner(event: MessageEvent, line_bot_api: MessagingApi)
             session["psych"]["end_quote"]        = quote_text
             session["psych"]["quote_author"]     = quote_author
             session["psych"]["dialogue_insight"] = dialogue_insight
-            session["psych"]["tarot_card"]       = session.get("current_projective_card")
+            # 優先使用本次收尾牌，fallback 到 STAGNANT 投射牌
+            session["psych"]["tarot_card"] = (
+                tarot.get("card_name") or session.get("current_projective_card")
+            )
+            session["psych"]["tarot_name_zh"] = tarot.get("name_zh", "")
+            session["psych"]["tarot_meaning"]  = tarot.get("meaning", "")
 
             # 6. 準備 Flex 字卡（帶 insight_id → 覆蓋牌翻牌互動）
             _closure_flex = build_closure_flex(
