@@ -702,39 +702,108 @@ async def _reply(reply_token: str, text: str, line_bot_api: MessagingApi):
 
 
 async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
+    """重構歡迎卡片 — Glow Dark Mode 三層結構，建立治療同盟（Rapport）"""
+    import os as _os
+    liff_url = _os.getenv("APP_URL", "https://liff.line.me/2010279401-zI4pqH8D")
+
     flex_content = {
         "type": "bubble",
-        "size": "kilo",
+        "styles": {
+            "body": {"backgroundColor": "#0b0f19"},
+        },
         "body": {
             "type": "box",
             "layout": "vertical",
-            "spacing": "sm",
-            "paddingAll": "20px",
+            "paddingAll": "xl",
             "contents": [
-                {"type": "text", "text": "嗨，我在這裡 🌙",
-                 "weight": "bold", "size": "md", "color": "#1D9E75"},
-                {"type": "text",
-                 "text": "想說什麼就說，不用完整，不用有結論。\n\n• 直接說出感受或煩惱\n• 輸入「簽到」記錄今天\n• 輸入「說明」了解功能",
-                 "size": "sm", "color": "#555555", "wrap": True, "margin": "md"}
-            ]
+
+                # ── 層 1：情感宣告 ──────────────────────────
+                {
+                    "type": "text",
+                    "text": "很高興你在這裡 🌿",
+                    "color": "#6366f1",
+                    "weight": "bold",
+                    "size": "md",
+                },
+                {
+                    "type": "text",
+                    "text": (
+                        "這裡是一個完全屬於你、沒有評判的安全容器。"
+                        "你可以對我吐槽工作的疲憊、說出心底的委屈，"
+                        "或是單純碎碎念。"
+                    ),
+                    "color": "#e2e8f0",
+                    "wrap": True,
+                    "size": "xs",
+                    "margin": "md",
+                    "lineSpacing": "5px",
+                },
+
+                # ── 分隔線 ───────────────────────────────────
+                {"type": "separator", "color": "#1e293b", "margin": "lg"},
+
+                # ── 層 2：新手行動引導 ───────────────────────
+                {
+                    "type": "text",
+                    "text": "🪐 給初來乍到的你",
+                    "color": "#f59e0b",
+                    "weight": "bold",
+                    "size": "xs",
+                    "margin": "lg",
+                },
+                {
+                    "type": "text",
+                    "text": (
+                        "請先試著對我說幾句你今天的心情。"
+                        "當我們有了第一次對話，下方的日記按鈕就會點亮"
+                        "專屬於你的金色 ✦ 情緒月曆與週報喔！"
+                    ),
+                    "color": "#94a3b8",
+                    "wrap": True,
+                    "size": "xxs",
+                    "margin": "xs",
+                    "lineSpacing": "4px",
+                },
+
+                # ── 層 2b：LIFF 入口按鈕 ────────────────────
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "uri",
+                        "label": "📊 開啟我的心事日記 ✦",
+                        "uri": f"{liff_url}#dashboard",
+                    },
+                    "style": "secondary",
+                    "margin": "lg",
+                    "color": "#131a26",
+                    "height": "sm",
+                },
+
+                # ── 分隔線 ───────────────────────────────────
+                {"type": "separator", "color": "#1e293b", "margin": "lg"},
+
+                # ── 層 3：靜態快捷指令提示 ───────────────────
+                {
+                    "type": "text",
+                    "text": (
+                        "💡 輸入「說明」查閱完整功能與隱私管理\n"
+                        "　　輸入「簽到」記錄此刻的身體感知"
+                    ),
+                    "color": "#64748b",
+                    "wrap": True,
+                    "size": "xxs",
+                    "margin": "md",
+                    "lineSpacing": "4px",
+                },
+            ],
         },
-        "footer": {
-            "type": "box",
-            "layout": "vertical",
-            "paddingAll": "12px",
-            "contents": [{
-                "type": "button",
-                "action": {"type": "uri", "label": "📊 查看我的心事日記",
-                           "uri": APP_URL},
-                "style": "primary", "color": "#1D9E75", "height": "sm"
-            }]
-        }
     }
+
     await line_bot_api.reply_message(
         ReplyMessageRequest(
             reply_token=reply_token,
             messages=[FlexMessage(
-                alt_text="嗨，我在這裡 🌙",
+                alt_text="很高興你在這裡 🌿",
                 contents=FlexContainer.from_dict(flex_content)
             )]
         )
