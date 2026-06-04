@@ -708,22 +708,24 @@ async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
 
     flex_content = {
         "type": "bubble",
+        "size": "mega",                        # 加寬卡片，給文字更多空間
         "styles": {
             "body": {"backgroundColor": "#0b0f19"},
         },
         "body": {
             "type": "box",
             "layout": "vertical",
-            "paddingAll": "xl",
+            "paddingAll": "xxl",
+            "spacing": "none",
             "contents": [
 
                 # ── 層 1：情感宣告 ──────────────────────────
                 {
                     "type": "text",
                     "text": "很高興你在這裡 🌿",
-                    "color": "#6366f1",
+                    "color": "#818cf8",        # indigo-400，比原本亮，深色背景更醒目
                     "weight": "bold",
-                    "size": "md",
+                    "size": "xl",              # md → xl
                 },
                 {
                     "type": "text",
@@ -732,24 +734,24 @@ async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
                         "你可以對我吐槽工作的疲憊、說出心底的委屈，"
                         "或是單純碎碎念。"
                     ),
-                    "color": "#e2e8f0",
+                    "color": "#e2e8f0",        # 亮白色，對比深底清楚
                     "wrap": True,
-                    "size": "xs",
-                    "margin": "md",
-                    "lineSpacing": "5px",
+                    "size": "sm",              # xs → sm
+                    "margin": "lg",
+                    "lineSpacing": "8px",
                 },
 
                 # ── 分隔線 ───────────────────────────────────
-                {"type": "separator", "color": "#1e293b", "margin": "lg"},
+                {"type": "separator", "color": "#334155", "margin": "xl"},
 
                 # ── 層 2：新手行動引導 ───────────────────────
                 {
                     "type": "text",
                     "text": "🪐 給初來乍到的你",
-                    "color": "#f59e0b",
+                    "color": "#fbbf24",        # amber-400，更亮更清楚
                     "weight": "bold",
-                    "size": "xs",
-                    "margin": "lg",
+                    "size": "sm",              # xs → sm
+                    "margin": "xl",
                 },
                 {
                     "type": "text",
@@ -758,11 +760,11 @@ async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
                         "當我們有了第一次對話，下方的日記按鈕就會點亮"
                         "專屬於你的金色 ✦ 情緒月曆與週報喔！"
                     ),
-                    "color": "#94a3b8",
+                    "color": "#cbd5e1",        # slate-300，比原本亮一個檔次
                     "wrap": True,
-                    "size": "xxs",
-                    "margin": "xs",
-                    "lineSpacing": "4px",
+                    "size": "sm",              # xxs → sm
+                    "margin": "md",
+                    "lineSpacing": "7px",
                 },
 
                 # ── 層 2b：LIFF 入口按鈕 ────────────────────
@@ -773,27 +775,39 @@ async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
                         "label": "📊 開啟我的心事日記 ✦",
                         "uri": f"{liff_url}#dashboard",
                     },
-                    "style": "primary",   # primary = 實心填色，文字白色，清晰可見
-                    "margin": "lg",
-                    "color": "#6366f1",   # indigo，對齊標題色，在深色背景上清楚顯示
-                    "height": "sm",
+                    "style": "primary",
+                    "margin": "xl",
+                    "color": "#6366f1",
+                    "height": "md",            # sm → md，按鈕更高更好點擊
                 },
 
                 # ── 分隔線 ───────────────────────────────────
-                {"type": "separator", "color": "#1e293b", "margin": "lg"},
+                {"type": "separator", "color": "#334155", "margin": "xl"},
 
-                # ── 層 3：靜態快捷指令提示 ───────────────────
+                # ── 層 3：快捷指令提示 ───────────────────────
                 {
                     "type": "text",
-                    "text": (
-                        "💡 輸入「說明」查閱完整功能與隱私管理\n"
-                        "　　輸入「簽到」記錄此刻的身體感知"
-                    ),
-                    "color": "#64748b",
+                    "text": "💡 快捷指令",
+                    "color": "#94a3b8",
+                    "weight": "bold",
+                    "size": "xs",              # 小標
+                    "margin": "xl",
+                },
+                {
+                    "type": "text",
+                    "text": "輸入「說明」→ 完整功能與隱私管理",
+                    "color": "#94a3b8",        # slate-400，可讀性夠
                     "wrap": True,
-                    "size": "xxs",
-                    "margin": "md",
-                    "lineSpacing": "4px",
+                    "size": "sm",              # xxs → sm
+                    "margin": "sm",
+                },
+                {
+                    "type": "text",
+                    "text": "輸入「簽到」→ 記錄此刻的身體感知",
+                    "color": "#94a3b8",
+                    "wrap": True,
+                    "size": "sm",
+                    "margin": "sm",
                 },
             ],
         },
