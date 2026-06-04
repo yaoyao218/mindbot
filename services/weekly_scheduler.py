@@ -176,6 +176,22 @@ AI 輔助心理診斷摘要：
         "quote_author": data.get("quote_author", ""),
     }
 
+# ── 向後相容包裝（main.py /api/snapshot 仍 import 此函式）──
+async def generate_weekly_summary(
+    messages: list[dict], week_id: str
+) -> tuple[str, list[str], str]:
+    """
+    回傳 (summary, themes, growth_note) 三元組。
+    內部呼叫完整考古 Pipeline，只取三個基礎欄位回傳，
+    維持 main.py /api/snapshot 原有呼叫介面不變。
+    """
+    result = await generate_archaeology_report(messages, [], week_id)
+    return (
+        result.get("summary",     ""),
+        result.get("themes",      []),
+        result.get("growth_note", ""),
+    )
+
 # ── 低參與降級塔羅池 ─────────────────────────────────────
 _LOW_ENGAGEMENT_TAROT_POOL = [
     ("WHEEL_OF_FORTUNE_REVERSED", "命運之輪・逆位", "靜待時機，內在正在蓄積力量"),

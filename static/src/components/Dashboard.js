@@ -233,7 +233,8 @@ export function renderFallbackUI(container, weeklyData) {
       if (window.liff?.isInClient()) {
         window.liff.closeWindow();
       } else {
-        window.open('https://line.me/R/ti/p/@mindbot', '_blank');
+        const id = window.MindBotApp?._lineAccountId;
+        window.open(id ? `https://line.me/R/ti/p/${id}` : 'https://line.me/', '_blank');
       }
     });
   });

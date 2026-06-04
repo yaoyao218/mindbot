@@ -13,12 +13,13 @@ import { renderWelcomeModal }                  from './components/WelcomeModal.j
 
 class AppController {
   constructor() {
-    this.currentRoute = 'dashboard';
-    this._token       = null;
-    this._userId      = null;
-    this._userName    = null;
-    this._calYear     = new Date().getFullYear();
-    this._calMonth    = new Date().getMonth() + 1;
+    this.currentRoute   = 'dashboard';
+    this._token         = null;
+    this._userId        = null;
+    this._userName      = null;
+    this._calYear       = new Date().getFullYear();
+    this._calMonth      = new Date().getMonth() + 1;
+    this._lineAccountId = '';   // 從 /api/config 載入，取代硬寫的 @mindbot
   }
 
   /* ── 啟動入口 ─────────────────────────────────── */
@@ -37,6 +38,7 @@ class AppController {
       // 載入 LIFF_ID — 使用帶 timeout 的 _api()，避免 Railway 冷啟動卡死
       try {
         const cfg = await this._api('/api/config');   // ← 8s timeout 保護
+        if (cfg.line_account_id) this._lineAccountId = cfg.line_account_id;
         if (cfg.liff_id && window.liff) {
           // liff.init() 本身沒有 timeout，用 Promise.race 加上 6s 熔斷
           await Promise.race([
@@ -341,7 +343,8 @@ class AppController {
       if (window.liff?.isInClient()) {
         window.liff.closeWindow();
       } else {
-        window.open('https://line.me/R/ti/p/@mindbot', '_blank');
+        const id = window.MindBotApp?._lineAccountId;
+        window.open(id ? `https://line.me/R/ti/p/${id}` : 'https://line.me/', '_blank');
       }
     });
 

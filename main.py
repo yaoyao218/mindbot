@@ -267,8 +267,9 @@ async def get_config():
     """前端啟動時呼叫，取得 LINE Login Channel ID、LIFF ID 等設定"""
     return JSONResponse({
         "line_login_channel_id": os.environ.get("LINE_LOGIN_CHANNEL_ID", ""),
-        "liff_id":               os.environ.get("LIFF_ID", ""),          # 有設定才啟用 LIFF
+        "liff_id":               os.environ.get("LIFF_ID", ""),
         "app_url":               os.environ.get("APP_URL", "https://web-production-dd506.up.railway.app"),
+        "line_account_id":       os.environ.get("LINE_ACCOUNT_ID", ""),   # e.g. @mindbot_tw
     })
 
 
