@@ -255,8 +255,8 @@ def build_closure_flex(
     未提供時降級為純文字名言卡（相容舊流程）。
     """
     import datetime as _dt
-    today_str = _dt.date.today().strftime("%-m 月 %-d 日") if hasattr(
-        _dt.date.today(), "strftime") else str(_dt.date.today())
+    _today = _dt.date.today()
+    today_str = f"{_today.month} 月 {_today.day} 日"
 
     author_line = f"—— {quote_author}" if quote_author else ""
 

@@ -153,10 +153,12 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
         if not reply:
             reply = "對不起，我知道剛才的回話讓你覺得被敷衍了。\n我就在這裡，你說吧。"
         # 【修復核心】重置 rupture 旗標 + 啟動 2 輪冷卻
-        # 冷卻期間 diagnose() 不得重新觸發 rupture，防止「道歉跳針迴圈」
+        # defense_mechanism 同步清除：避免 **psych 展開後 INTELLECTUALIZATION 殘留，
+        # 導致下一輪 Gentle Confrontation 誤觸（rupture 與 intellectualization 互斥）
         return reply, {"psych": {
             **psych,
             "alliance_rupture": None,
+            "defense_mechanism": None,      # 清除防衛旗標
             "rupture_repair_cooldown": 2,   # 保護 2 輪
         }}
 
@@ -174,7 +176,9 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
         )
         if not reply:
             reply = "你分析得很清楚。當你說這些的時候，身體有什麼感覺嗎？"
-        return reply, {}
+        # 觸發後清除旗標：讓下一輪 clinical_diagnosis 重新評估，
+        # 而不是永遠卡在 Gentle Confrontation 模式
+        return reply, {"psych": {**psych, "defense_mechanism": None}}
 
     # 危機冷卻脈絡注入（crisis_cooldown_turns > 0 時）
     crisis_turns = psych.get("crisis_cooldown_turns", 0)
