@@ -146,6 +146,10 @@ class AppController {
   }
 
   async _renderRoute(container, route) {
+    // 離開前清除 PsychBubble rAF，防止記憶體洩漏
+    window._mbPsychBubble?.destroy();
+    window._mbPsychBubble = null;
+
     // 骨架屏
     container.innerHTML = `
       <div class="px-4 py-6 space-y-3">

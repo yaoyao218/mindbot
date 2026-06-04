@@ -1,14 +1,9 @@
 /**
- * Dashboard.js — 雙模態沉澱快照
+ * Dashboard.js — 雙模態沉澱快照 + 情感考古卡片
  *
  * 記憶體防禦：
- *   window.mindBotCharts（Key = Canvas ID）
- *   渲染前呼叫 safelyDestroyChart() 根治 Canvas 重用警告
- *
- * 資料欄位對齊後端（weekly_scheduler.py）：
- *   arousal_curve : [{t: string, v: number}]   → 提取 .v
- *   past_baseline : [{t: string, v: number}] | undefined → 無資料時以本週平均防呆
- *   emotion_counts: { [label: string]: number }
+ *   window.mindBotCharts（Key = Canvas ID）→ safelyDestroyChart()
+ *   window._mbPsychBubble                  → 路由切換前呼叫 destroy()
  */
 
 if (!window.mindBotCharts) window.mindBotCharts = {};
@@ -68,6 +63,9 @@ export async function renderDashboard(container, weeklyData) {
 
       <!-- 洞察名言卡 -->
       ${_insightCard(weeklyData.psych_context || {})}
+
+      <!-- 考古卡片掛載點（renderArchaeologyCard 動態填入）-->
+      <div id="arch-mount"></div>
 
     </div>`;
 
@@ -167,6 +165,10 @@ export async function renderDashboard(container, weeklyData) {
       },
     }
   );
+
+  // 考古卡片（有 archaeology / triad 才渲染，無資料時靜默跳過）
+  const archMount = document.getElementById('arch-mount');
+  if (archMount) renderArchaeologyCard(archMount, weeklyData).catch(() => {});
 }
 
 /* ── 記憶體安全銷毀 ─────────────────────────────────── */
@@ -174,6 +176,105 @@ function safelyDestroyChart(canvasId) {
   if (window.mindBotCharts[canvasId]) {
     window.mindBotCharts[canvasId].destroy();
     delete window.mindBotCharts[canvasId];
+  }
+}
+
+/* ── 情感考古卡片 ────────────────────────────────────── */
+async function renderArchaeologyCard(mount, data) {
+  const tpl = document.getElementById('tpl-archaeology');
+  if (!tpl) return;
+
+  // 有任何考古欄位才渲染（snapshot 初期可能只有 summary/stats）
+  const arch  = data.archaeology  || {};
+  const arc   = data.narrative_arc || {};
+  const triad = data.triad         || {};
+  const hasArch  = arch.surface || arch.middle || arch.deep;
+  const hasTriad = (triad.emotion?.length || 0)
+                 + (triad.cognition?.length || 0)
+                 + (triad.need?.length || 0) > 0;
+  if (!hasArch && !hasTriad) return;
+
+  // 銷毀上一個 Bubble 實例
+  window._mbPsychBubble?.destroy();
+  window._mbPsychBubble = null;
+
+  // Clone template
+  const fragment = tpl.content.cloneNode(true);
+  const card     = fragment.querySelector('.arch-card');
+  if (!card) return;
+
+  // ── 資料填充工具 ─────────────────────────────────────
+  const _set = (selector, text) => {
+    card.querySelectorAll(selector).forEach(el => {
+      el.textContent = text ?? '';
+    });
+  };
+  const _show = (attr, cond) => {
+    card.querySelectorAll(`[data-show="${attr}"]`).forEach(el => {
+      el.style.display = cond ? '' : 'none';
+    });
+  };
+
+  // 簡單文字欄位（data-bind）
+  _set('[data-bind="week_id"]',    data.week_id);
+  _set('[data-bind="summary"]',    data.summary);
+  _set('[data-bind="growth_note"]', data.growth_note);
+  _set('[data-bind="end_quote"]',  data.end_quote || data.psych_context?.end_quote);
+  _set('[data-bind="quote_author"]',
+    data.quote_author || data.psych_context?.quote_author || '');
+
+  // 三層地質
+  _set('[data-bind="archaeology.surface"]', arch.surface);
+  _set('[data-bind="archaeology.middle"]',  arch.middle);
+  _set('[data-bind="archaeology.deep"]',    arch.deep);
+
+  // 起承轉合
+  _set('[data-bind="narrative_arc.opening"]',     arc.opening);
+  _set('[data-bind="narrative_arc.development"]', arc.development);
+  _set('[data-bind="narrative_arc.turning"]',     arc.turning);
+  _set('[data-bind="narrative_arc.closing"]',     arc.closing);
+
+  // 主題標籤（動態生成 .arch-theme-tag span）
+  const themesEl = card.querySelector('[data-bind="themes"]');
+  if (themesEl) {
+    themesEl.innerHTML = (data.themes || [])
+      .map(t => `<span class="arch-theme-tag">${_esc(t)}</span>`)
+      .join('');
+  }
+
+  // 條件顯示
+  _show('growth_note', data.growth_note);
+  _show('end_quote',   data.end_quote || data.psych_context?.end_quote);
+
+  // 三層地質整區：surface 都空則隱藏
+  if (!hasArch) {
+    card.querySelector('.arch-layers')?.remove();
+  }
+
+  // 起承轉合整區：全空則隱藏
+  if (!arc.opening && !arc.development && !arc.turning && !arc.closing) {
+    card.querySelector('.arch-narrative')?.remove();
+  }
+
+  // 掛載 DOM（先 append，canvas 才有尺寸）
+  mount.appendChild(fragment);
+
+  // ── PsychBubble（動態 import，避免影響首屏載入）────
+  if (hasTriad) {
+    try {
+      const { PsychBubble } = await import('./psych_bubble.js');
+      const canvas = mount.querySelector('.arch-bubble-wrap canvas');
+      if (canvas) {
+        window._mbPsychBubble = new PsychBubble(canvas, triad);
+      }
+    } catch (e) {
+      console.warn('[Dashboard] PsychBubble 載入失敗:', e);
+      mount.querySelector('.arch-bubble-wrap')?.remove();
+      mount.querySelector('.arch-bubble-label')?.remove();
+    }
+  } else {
+    mount.querySelector('.arch-bubble-wrap')?.remove();
+    mount.querySelector('.arch-bubble-label')?.remove();
   }
 }
 
