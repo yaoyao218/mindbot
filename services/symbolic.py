@@ -312,6 +312,52 @@ def assign_tarot_structured(emotion: str, arousal: int) -> dict:
     }
 
 
+def assign_stagnant_minor_arcana(emotion: str = "") -> dict:
+    """
+    停滯狀態（STAGNANT）專用：固定從小阿爾克那中選牌。
+    優先依情緒選對應花色；無匹配則預設寶劍（防禦 / 思維困住）。
+
+    與 assign_tarot_structured 的差異：
+      - 不考慮 arousal 等級，永遠返回 minor
+      - 設計為精準投射「當下具體事件」的微觀防禦情緒
+    """
+    suit = EMOTION_TO_MINOR_SUIT.get(emotion, "swords")
+    candidates = {k: v for k, v in MINOR_ARCANA.items() if k.startswith(suit)}
+    key, card  = random.choice(list(candidates.items()))
+    is_reversed = random.random() < 0.3
+    meaning = card["reversed"] if is_reversed else card["upright"]
+    return {
+        "mode":        "minor",
+        "card_name":   card["name"],
+        "card_full":   card["name"],
+        "meaning":     meaning,
+        "is_reversed": is_reversed,
+        "suit":        suit,
+    }
+
+
+def assign_week_major_arcana(week_id: str = "") -> dict:
+    """
+    週報專用：固定從大阿爾克那 22 張中選牌，定調本週核心精神腳本。
+    依 week_id 字元數字 hash 穩定選牌（同一週永遠相同）。
+    """
+    if week_id:
+        seed = sum(int(c) for c in week_id if c.isdigit())
+    else:
+        seed = random.randint(0, 21)
+    card_id = seed % len(MAJOR_ARCANA)
+    card = MAJOR_ARCANA[card_id]
+    name = card["name"].split(" ")[0]
+    return {
+        "mode":        "major",
+        "card_name":   name,
+        "card_full":   card["name"],
+        "meaning":     card["upright"],
+        "is_reversed": False,
+        "suit":        None,
+    }
+
+
 def assign_milestone_tarot() -> dict:
     """里程碑專用：固定從成長主題牌池選大阿爾克那"""
     card_id = random.choice(MILESTONE_TAROT_POOL)

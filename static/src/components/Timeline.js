@@ -275,6 +275,33 @@ function _isStagnant(text) {
   return STAGNANT_PATTERNS.some(p => text.includes(p));
 }
 
+// ── 小阿爾克那牌池（停滯攔截專用 — 對應當下微觀防禦情緒）──
+// 選取四花色中最能反映「停滯 / 阻抗 / 保護」能量的牌組
+const _STAGNANT_MINOR_POOL = [
+  // 寶劍（思維困住 / 迴避）
+  { card_name: '寶劍四', meaning: '你需要停下來，不是因為你輸了，而是因為你的系統需要重啟。',
+    projective_question: '如果暫時不想說，有沒有一件很小的事，是你願意先分享的？', is_reversed: false },
+  { card_name: '寶劍八', meaning: '你覺得被困住，但那些限制有多少是真實的，有多少是你給自己的？',
+    projective_question: '這份「不想說」的底下，是什麼讓你覺得說了也沒用？', is_reversed: false },
+  { card_name: '寶劍九', meaning: '腦袋在運轉，反覆想著那些最壞的可能性。那個焦慮，需要被聽見，不是被解決。',
+    projective_question: '現在最讓你感到窒息的一個念頭，是什麼？', is_reversed: false },
+  // 聖杯（情感關閉 / 撤退）
+  { card_name: '聖杯四', meaning: '你現在對很多事提不起勁。這不一定是問題，有時候是你需要向內看的訊號。',
+    projective_question: '你最近是否有什麼感覺，一直想說卻說不出口？', is_reversed: false },
+  { card_name: '聖杯八', meaning: '你決定暫時離開這個對話，這需要誠實，也需要勇氣。',
+    projective_question: '現在，有什麼是你真的不想再想的事？', is_reversed: false },
+  // 權杖（能量停頓 / 憤怒凝結）
+  { card_name: '權杖九', meaning: '你已經撐了很久了。還沒到終點，但你比自己以為的更有韌性。',
+    projective_question: '這份「隨便」或「算了」，是累了，還是有別的話還沒說？', is_reversed: false },
+  { card_name: '權杖六', meaning: '你做到了某件事，值得讓自己知道這件事。不是驕傲，是誠實。',
+    projective_question: '今天讓你感到最沉的事，是什麼？', is_reversed: false },
+  // 錢幣（現實消耗 / 身體疲憊）
+  { card_name: '錢幣五', meaning: '你現在覺得匱乏，不管是物質上還是情感上。但你不是一個人在外面的雪地裡。',
+    projective_question: '現在最需要的支持，是什麼形式的？', is_reversed: false },
+  { card_name: '錢幣十', meaning: '你在建立一些比自己更長久的東西，即使現在感覺不到。',
+    projective_question: '有什麼事，是你希望我記得的？', is_reversed: false },
+];
+
 // ── STAGNANT 塔羅坑 ─────────────────────────────────────────
 function _buildTarotDock() {
   const dock = document.createElement('div');
@@ -284,20 +311,20 @@ function _buildTarotDock() {
   // 標題
   const label = document.createElement('p');
   label.style.cssText =
-    'font-size:9px;letter-spacing:.14em;color:rgba(245,158,11,.4);' +
+    'font-size:9px;letter-spacing:.14em;color:rgba(245,158,11,.5);' +
     'text-transform:uppercase;margin-bottom:8px;text-align:center';
-  label.textContent = '✦ AI 偵測到停滯信號，為你投影一張牌';
+  label.textContent = '✦ 小阿爾克那 · AI 偵測停滯信號為你投影';
   dock.appendChild(label);
+
+  // 依當前分鐘選牌（每次打開可能不同，增加即時感）
+  const idx  = new Date().getMinutes() % _STAGNANT_MINOR_POOL.length;
+  const card = _STAGNANT_MINOR_POOL[idx];
 
   // 動態 import TarotFlip 並掛載
   import('./tarot_flip.js')
     .then(({ renderTarotFlip }) => {
       if (!dock.isConnected) return;
-      renderTarotFlip(dock, {
-        card_name:           '停滯之鏡',
-        meaning:             '此刻的阻抗，正是內心在保護某個還來不及說出口的脆弱部分。',
-        projective_question: '在這份「隨便」或「死開」之下，有一個你還不敢承認的真實感受，它會是什麼？',
-      });
+      renderTarotFlip(dock, card);
     })
     .catch(() => {});
 

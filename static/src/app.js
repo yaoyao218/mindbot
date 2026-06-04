@@ -324,9 +324,13 @@ class AppController {
           ${data.emotion_emoji || ''} ${data.emotion_label}
         </div>` : '';
 
+      // 當日心靈名言字卡（用 daily_narrative 作為 AI 溫柔敘述，以名言形式呈現）
+      const quoteText   = data.daily_narrative || '';
+      const quoteAuthor = data.emotion_label   ? `${data.emotion_emoji || ''} ${data.emotion_label}` : '心事日記';
+
       mc.innerHTML = `
         <!-- 一日微型氣泡場 -->
-        <div style="width:100%;height:160px;position:relative;margin-bottom:10px;
+        <div style="width:100%;height:160px;position:relative;margin-bottom:12px;
                     border-radius:.875rem;overflow:hidden;
                     background:rgba(7,11,20,.5);
                     border:1px solid rgba(99,102,241,.08)">
@@ -336,30 +340,28 @@ class AppController {
         <!-- 心理狀態毛玻璃發光標籤 -->
         ${stateTag ? `<div style="text-align:center;margin-bottom:14px">${stateTag}</div>` : ''}
 
-        <!-- 3D 塔羅翻牌 -->
-        ${data.tarot_card ? '<div id="modal-tarot-container" class="mb-3"></div>' : ''}
-
-        <!-- 每日敘述 -->
-        ${data.daily_narrative
-          ? `<p class="text-slate-300 text-sm leading-relaxed"
-                  style="font-family:'Noto Serif TC',serif;margin-top:4px"
-             >${data.daily_narrative}</p>`
-          : ''}`;
+        <!-- 當日心靈名言字卡（取代原本的塔羅翻牌）-->
+        ${quoteText ? `
+        <div style="border-left:2px solid rgba(245,158,11,.45);
+                    padding:14px 16px;margin:4px 0 8px;
+                    background:rgba(245,158,11,.04);
+                    border-radius:0 .875rem .875rem 0">
+          <p style="font-family:'Noto Serif TC',Georgia,serif;
+                    font-size:14px;line-height:1.85;
+                    color:rgba(255,255,255,.82);
+                    font-style:italic;margin:0 0 10px">
+            「${quoteText}」
+          </p>
+          <span style="font-size:11px;color:rgba(245,158,11,.65);
+                       display:block;text-align:right;letter-spacing:.04em">
+            — ${quoteAuthor}
+          </span>
+        </div>` : ''}`;
 
       // Mount PsychBubble on canvas
       const canvas = mc.querySelector('#modal-psych-canvas');
       if (canvas) {
         window._modalPsychBubble = new PsychBubble(canvas, triad);
-      }
-
-      // Mount TarotFlip
-      const tarotWrap = mc.querySelector('#modal-tarot-container');
-      if (tarotWrap) {
-        renderTarotBlind(tarotWrap, {
-          card_name:   data.tarot_card,
-          meaning:     data.tarot_meaning  || '',
-          is_reversed: data.tarot_reversed || false,
-        });
       }
     }).catch(() => {
       overlay.querySelector('.modal-body').innerHTML =

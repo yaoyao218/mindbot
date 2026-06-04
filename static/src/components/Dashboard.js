@@ -291,18 +291,30 @@ async function renderArchaeologyCard(mount, data) {
   }
 }
 
-/* ── 大阿爾克那牌池（週度心靈大局基調）────────────────
- *  當用戶尚未觸發收尾塔羅時，依週別輪換一張大阿爾克那
- *  作為潛意識背景提示，維持儀式感。
+/* ── 大阿爾克那牌池（週度心靈大局 — 22 張主牌精選）────
+ *  週報塔羅永遠使用大阿爾克那，定調整週核心精神腳本。
+ *  依 weekId hash 穩定輪換，同一週每次打開都顯示同一張。
  */
 const _MAJOR_ARCANA_POOL = [
-  { card_name: '隱者',   meaning: '此刻需要向內探索，外界的喧囂可以先放下。答案往往在安靜之中浮現。',   is_reversed: false },
-  { card_name: '月亮',   meaning: '潛意識的波濤正在湧現，夢境與直覺比理性更接近真相。',                  is_reversed: false },
-  { card_name: '星星',   meaning: '療癒正在悄悄進行，信任這個看不見結果的過程。',                        is_reversed: false },
-  { card_name: '力量',   meaning: '溫柔地面對自己，比強迫自己振作更需要勇氣。',                          is_reversed: false },
-  { card_name: '愚者',   meaning: '新的開始正在醞釀，此刻的未知是機遇的伏筆。',                          is_reversed: false },
-  { card_name: '審判',   meaning: '過去的一切正在召喚你誠實地面對，這是覺醒的開端。',                    is_reversed: false },
-  { card_name: '戰車',   meaning: '內在的衝突需要整合，找到前進的方向比速度更重要。',                    is_reversed: false },
+  { card_name: '愚者',     meaning: '新的開始正在醞釀，此刻所有的未知都是機遇的伏筆。',                         is_reversed: false },
+  { card_name: '魔術師',   meaning: '你手上的資源比你以為的多，問題不是「有沒有」，是「敢不敢用」。',             is_reversed: false },
+  { card_name: '女祭司',   meaning: '你其實已經知道答案了，只是還沒準備好承認它。',                             is_reversed: false },
+  { card_name: '皇后',     meaning: '你值得被好好對待，包括被你自己。允許自己休息、允許自己豐盛。',               is_reversed: false },
+  { card_name: '皇帝',     meaning: '你需要的不是更多選項，而是一個決定。站穩，然後走。',                        is_reversed: false },
+  { card_name: '戀人',     meaning: '這不只是關係的問題，是關於你選擇成為什麼樣的人。',                         is_reversed: false },
+  { card_name: '戰車',     meaning: '內在的衝突需要整合，找到前進的方向比速度更重要。',                          is_reversed: false },
+  { card_name: '力量',     meaning: '真正的穩定不是沒有情緒，是即使有情緒，你還是在場。',                       is_reversed: false },
+  { card_name: '隱士',     meaning: '你需要的答案，在安靜裡。不是逃避，是往內走。',                             is_reversed: false },
+  { card_name: '命運之輪', meaning: '事情在動，不全是你能控制的。你能做的是，在變化裡找到你的位置。',            is_reversed: false },
+  { card_name: '正義',     meaning: '有些事需要你誠實面對，不是懲罰，是清算後才能走輕。',                       is_reversed: false },
+  { card_name: '倒吊人',   meaning: '現在沒有辦法動，但這個停頓不是浪費，是醞釀。換個角度，你會看見不同的東西。', is_reversed: false },
+  { card_name: '死神',     meaning: '某個階段真的結束了。不是失去，是騰出空間。',                               is_reversed: false },
+  { card_name: '節制',     meaning: '你不需要一次就到位。慢慢來，一點一點地調，也是一種前進。',                   is_reversed: false },
+  { card_name: '星星',     meaning: '療癒正在悄悄進行，信任這個看不見結果的過程。',                             is_reversed: false },
+  { card_name: '月亮',     meaning: '潛意識的波濤正在湧現，霧裡走路不代表走錯了。',                             is_reversed: false },
+  { card_name: '太陽',     meaning: '今天有什麼是真的讓你感覺到了活著的？就算很小，也算。',                      is_reversed: false },
+  { card_name: '審判',     meaning: '你有機會重新定義自己是誰，不是根據過去，而是根據你現在選擇的樣子。',         is_reversed: false },
+  { card_name: '世界',     meaning: '某件事真的完成了。你可以好好地結束它，然後帶著它給你的，繼續走。',           is_reversed: false },
 ];
 
 async function _renderWeeklyTarotDock(mount, pc, weekId) {
@@ -311,25 +323,18 @@ async function _renderWeeklyTarotDock(mount, pc, weekId) {
   const { renderTarotFlip } = await import('./tarot_flip.js');
   if (!mount.isConnected) return;
 
-  // 有真實觸發牌 → 直接呈現
-  const hasRealCard = !!(pc.tarot_card || pc.tarot_name_zh);
+  // 週報永遠使用大阿爾克那（主牌定調整週核心精神腳本）
+  // 依 weekId 數字 hash 穩定選牌，同一週每次打開顯示相同的牌
+  const seed = weekId
+    ? weekId.replace(/\D/g, '').split('').reduce((a, c) => a + +c, 0)
+    : new Date().getDay();
+  const cardData = _MAJOR_ARCANA_POOL[seed % _MAJOR_ARCANA_POOL.length];
 
-  let cardData;
-  if (hasRealCard) {
-    cardData = {
-      card_name:           pc.tarot_name_zh || pc.tarot_card,
-      meaning:             pc.tarot_meaning  || pc.dialogue_insight || '',
-      is_reversed:         pc.tarot_reversed || false,
-      defense_type:        pc.defense_type   || '',
-      projective_question: pc.projective_question || '',
-    };
-  } else {
-    // 無觸發牌 → 依週別 hash 選一張大阿爾克那
-    const seed = weekId
-      ? weekId.replace(/\D/g, '').split('').reduce((a, c) => a + +c, 0)
-      : new Date().getDay();
-    cardData = _MAJOR_ARCANA_POOL[seed % _MAJOR_ARCANA_POOL.length];
-  }
+  // 補充 psych_context 的 dialogue_insight 作為 projective_question（若有）
+  const enrichedCard = {
+    ...cardData,
+    projective_question: pc.dialogue_insight || '',
+  };
 
   // 外層容器
   mount.innerHTML = `
@@ -337,13 +342,13 @@ async function _renderWeeklyTarotDock(mount, pc, weekId) {
       <p style="font-size:10px;letter-spacing:.16em;
                 color:rgba(245,158,11,.55);text-transform:uppercase;
                 margin-bottom:8px;padding:0 4px">
-        ✦ ${hasRealCard ? '本週心靈投射牌' : '當前心靈大局概況'}
+        ✦ 本週心靈大局 · 大阿爾克那
       </p>
       <div id="wt-flip-inner"></div>
     </div>`;
 
   const inner = mount.querySelector('#wt-flip-inner');
-  if (inner) renderTarotFlip(inner, cardData);
+  if (inner) renderTarotFlip(inner, enrichedCard);
 }
 
 /* ── 降級留白充電 UI ────────────────────────────────── */
