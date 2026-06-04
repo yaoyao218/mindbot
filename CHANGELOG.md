@@ -137,6 +137,32 @@ elif arousal_level >= 4:
 
 ---
 
+---
+
+### 7. Supportive_Reflection 提問頻率隔離鎖
+**檔案**：`services/companion.py`
+
+**修復**：在 `Supportive_Reflection` 分支加入逐輪提問頻率檢查。往前掃描最後一條 bot 回覆，若含 `？` 或 `?` 則本輪強制零問號（靜默陪伴）；否則允許一個極度溫和的當下感官邀請。規則以 `allow_question_directive` 字串動態注入 prompt，AI 無法繞過。
+
+---
+
+### 8. 求救訊號臨床三階層處方箋分流
+**檔案**：`services/companion.py`
+
+**背景**：解決 AI 面對「我該怎麼辦」時流於說教或過度反映的兩極化失敗體驗。
+
+**實作**：在 `Supportive_Reflection` 分支頂端加入求救關鍵字偵測（`該怎麼辦`、`怎麼辦`、`怎麼做`、`救我` 等 9 組），命中後依 `arousal_level` 分三層路由：
+
+| 層級 | 條件 | 模式 | 核心策略 |
+|------|------|------|---------|
+| Level 1 | arousal == 5 | `GROUNDING_SYSTEM` | 零提問，帶領身體著陸（觸摸質地 / 4-4-4 呼吸 / 五感掃描），最多 120 字 |
+| Level 2 | arousal == 4 | `MICRO_FOCUS_SYSTEM` | 禁解大題，微粒化為「當下五分鐘一件微小行動」，最多 100 字 |
+| Level 3 | arousal ≤ 3 | `ACT_VALUE_PROBE_SYSTEM` | ACT 核心價值探針，一個溫和開放問句引導釐清自身在乎的事，最多 80 字 |
+
+三層路由命中後直接 `return`，不進入常規 Supportive_Reflection 流程，避免邏輯混用。
+
+---
+
 ## 變更影響範圍
 
 | 檔案 | 變更類型 |

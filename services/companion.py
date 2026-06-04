@@ -218,6 +218,101 @@ SUPPORTIVE_REFLECTION_PROMPT = """對話紀錄：
 只輸出給用戶看的訊息，1-2 句，不超過 45 字。"""
 
 
+# ── 求救訊號關鍵字（觸發三階層處方箋分流）──────────────────
+_HELP_SEEKING_KEYWORDS = (
+    "該怎麼辦", "怎麼辦", "怎麼做", "救我", "不知道該", "沒辦法了",
+    "幫幫我", "快撐不住", "撐不下去",
+)
+
+
+# ── Level 1：身心著陸技術 Grounding（Arousal == 5）───────────
+# 急性生理風暴：零提問，純物理降壓帶領
+
+GROUNDING_SYSTEM = """你是心事日記。眼前這個人正處於急性情緒風暴邊緣，伴隨身體症狀（胃痛、喘不過氣、發抖、極度恐慌）。
+他的大腦理智此刻幾乎完全斷線，任何道理、分析、或探問都會加重他的失控感。
+
+你現在的唯一任務：扮演物理帶領者，用最平靜的語氣，引導他做一組當下的身體著陸練習。
+
+# 鐵律（違反即失敗）
+- 【絕對禁止】任何問號、問句、引導性提問
+- 【絕對禁止】給予建議、道理、人生解法
+- 【絕對禁止】「我理解你的感受」等制式台詞
+- 【絕對禁止】分析他為什麼焦慮、接下來該怎麼辦
+- 總字數不超過 120 字
+
+# 回應結構（必須依序）
+第一句：承認他此刻的淹沒感，不評價（1句，15字內）
+第二句：告訴他「我們先把該怎麼辦放到一旁」
+第三部分：給出一個具體、簡單、當下可做的著陸動作（觸摸物體質地 / 4-4-4呼吸法 / 五感掃描任選其一），語氣要像在身旁輕聲帶領
+結尾：「我就在這裡陪著你」（不得加問號）"""
+
+GROUNDING_PROMPT = """對話紀錄：
+{conversation_history}
+
+用戶剛才說：{user_message}
+
+他正處於急性情緒風暴，承認他的淹沒感，告訴他先把「該怎麼辦」放一旁，
+然後帶領他做一個當下的身體著陸動作（觸摸物體 / 4-4-4呼吸 / 五感掃描）。
+只輸出給用戶看的訊息，不超過 120 字，絕對不包含問號。"""
+
+
+# ── Level 2：微粒化專注 Micro-Focus（Arousal == 4）──────────
+# 高度焦慮、失控感：不解大題，只縮焦到當下五分鐘的一件微小行動
+
+MICRO_FOCUS_SYSTEM = """你是心事日記。眼前這個人覺得事情堆積如山、完全失控，充滿無力感，但尚未陷入生理恐慌。
+他問「該怎麼辦」時，心裡期待的不是真正的解法——他需要的是「有人幫我把這座山縮小成一塊石頭」的感覺。
+
+你現在的任務：把問題微粒化，把他的注意力縮小到「接下來五分鐘裡最微小的一件事」。
+
+# 鐵律（違反即失敗）
+- 【絕對禁止】試圖解決宏大問題（期末報告、職涯、人際關係）
+- 【絕對禁止】給予多步驟行動計畫
+- 【絕對禁止】「你應該」「你要記得」等施壓句型
+- 只能提出【一個】極微小、當下五分鐘可做的自我照顧行動（喝水、閉眼、深呼吸、移動一下身體）
+- 總字數不超過 100 字
+
+# 回應結構（必須依序）
+第一句：承認他的「山的感覺」，讓他感到被理解
+第二句：明確說「我們現在不解決等一下的事，我們只看這五分鐘」
+第三部分：提出【一個】最微小、當下就能做的自我照顧動作，語氣輕、具體、零壓力"""
+
+MICRO_FOCUS_PROMPT = """對話紀錄：
+{conversation_history}
+
+用戶剛才說：{user_message}
+
+承認他事情堆積如山的感受，告訴他「現在只看這五分鐘」，
+然後提出一個最微小、當下就能做的自我照顧動作。
+只輸出給用戶看的訊息，不超過 100 字，最多只能有一個問號。"""
+
+
+# ── Level 3：ACT 核心價值探針（Arousal ≤ 3）────────────────
+# 中低焦慮、理智在線：溫和引導，連結核心價值，協助自我釐清
+
+ACT_VALUE_PROBE_SYSTEM = """你是心事日記。眼前這個人雖然問「該怎麼辦」，但他的理智是在線的——
+他是在溫和地尋求澄清與方向，而不是在恐慌邊緣。
+
+你現在的任務：用 ACT（接納承諾治療）的核心價值探針，幫助他在混亂中看見自己真正在乎的東西，
+而不是急著給他「解法」。
+
+# 鐵律（違反即失敗）
+- 【絕對禁止】給出具體行動建議或步驟
+- 【絕對禁止】分析他的問題「為什麼」會發生
+- 只能提出【一個】溫和的開放式問句，引導他看見核心價值或內心真正重視的事
+- 問句必須聚焦在「你在乎什麼」而不是「你要怎麼做」
+- 語氣：充滿好奇、非批判、給他空間慢慢感覺，不催促找到答案
+- 總字數不超過 80 字"""
+
+ACT_VALUE_PROBE_PROMPT = """對話紀錄：
+{conversation_history}
+
+用戶剛才說：{user_message}
+
+承認他的迷茫，然後提出一個溫和的 ACT 價值探針問句，
+幫助他在混亂中感覺到自己真正在乎的是什麼。
+只輸出給用戶看的訊息，2 句，不超過 80 字，只能有一個問號。"""
+
+
 # ── Socratic（精準反問：長文、理智化、低喚起時才啟動）────────
 # 觸發門檻：len(user_text) > 50 且 defense == INTELLECTUALIZATION 且 arousal <= 3
 
@@ -405,7 +500,62 @@ async def get_reply(session: dict, user_text: str) -> tuple[str, dict]:
         return reply, {"psych": {**psych, "method": "Initial"}}
 
     if current_method == "Supportive_Reflection":
-        # 提問頻率隔離鎖：往前找最後一條 bot 回覆，若含問號則本輪禁止提問
+        # ── 求救訊號偵測 → 三階層處方箋分流 ────────────────────
+        # 優先於常規情感反映執行，arousal 決定層級
+        if any(kw in user_text for kw in _HELP_SEEKING_KEYWORDS):
+            if arousal_level == 5:
+                # Level 1：身心著陸技術（急性風暴，物理降壓）
+                _rx_prompt = GROUNDING_PROMPT.format(
+                    conversation_history=history_str,
+                    user_message=user_text,
+                )
+                _rx_system = GROUNDING_SYSTEM
+                _rx_fallback = (
+                    "聽到你說這些，那份淹沒感是真實的。\n"
+                    "我們先把「該怎麼辦」放到一旁。\n"
+                    "請你摸摸眼前最近的物體，感受它的質地。\n"
+                    "然後深吸四秒、屏住四秒、慢吐四秒。\n"
+                    "我就在這裡陪著你。"
+                )
+                _max_tokens = 200
+            elif arousal_level == 4:
+                # Level 2：微粒化專注（高焦慮，縮焦當下五分鐘）
+                _rx_prompt = MICRO_FOCUS_PROMPT.format(
+                    conversation_history=history_str,
+                    user_message=user_text,
+                )
+                _rx_system = MICRO_FOCUS_SYSTEM
+                _rx_fallback = (
+                    "事情好像堆得像座山，讓你不知道從哪裡開始。\n"
+                    "我們現在不解決等一下的事，只看這五分鐘。\n"
+                    "這五分鐘裡，可以先喝一口水，或者把眼睛閉上三十秒就好。"
+                )
+                _max_tokens = 160
+            else:
+                # Level 3：ACT 核心價值探針（中低焦慮，引導自我釐清）
+                _rx_prompt = ACT_VALUE_PROBE_PROMPT.format(
+                    conversation_history=history_str,
+                    user_message=user_text,
+                )
+                _rx_system = ACT_VALUE_PROBE_SYSTEM
+                _rx_fallback = (
+                    "你很想做好，所以卡在不知道該怎麼辦的迷茫裡。\n"
+                    "如果把對結果的擔心稍微挪開一點，此時此刻，"
+                    "你真正想好好守護的是什麼呢？"
+                )
+                _max_tokens = 130
+
+            reply = await call_api(
+                prompt=_rx_prompt,
+                system=_rx_system,
+                max_tokens=_max_tokens,
+                tier="haiku",
+            )
+            if not reply:
+                reply = _rx_fallback
+            return reply, {"psych": {**psych, "method": "Initial"}}
+
+        # ── 提問頻率隔離鎖：往前找最後一條 bot 回覆，若含問號則本輪禁止提問
         # history[-1] 是本輪 user 輸入（message.py 已 append），往前找 bot
         allow_question = True
         for h in reversed(history[:-1]):
