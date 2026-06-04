@@ -183,16 +183,21 @@ CLOSING_PROMPTS = [
 
 def should_show_closing(session: dict, arousal_level: int) -> bool:
     """判斷是否應附加對話結尾邀請"""
+    total_turn = session.get("total_turn", 0)
+
+    # 【鐵律】前 3 輪絕對不發射收尾提示
+    # 防止用戶才開始傾訴就被催促結束（對話初期的心理安全感保護）
+    if total_turn < 4:
+        return False
+
     today = date.today().isoformat()
 
     # 每天只顯示一次
     if session.get("closing_shown_date") == today:
         return False
 
-    total_turn = session.get("total_turn", 0)
-
-    # 條件 A：每 5 輪
-    if total_turn > 0 and total_turn % 5 == 0:
+    # 條件 A：每 5 輪（第 5、10、15... 輪）
+    if total_turn % 5 == 0:
         return True
 
     # 條件 B：Arousal 從高降回低（前一輪 ≥ 4，這輪 ≤ 2）
@@ -200,7 +205,7 @@ def should_show_closing(session: dict, arousal_level: int) -> bool:
     if prev_arousal >= 4 and arousal_level <= 2:
         return True
 
-    # 條件 C：晚上 9 點後（台灣時間）
+    # 條件 C：晚上 9 點後（台灣時間）+ 至少 4 輪（已由上方保護）
     from datetime import datetime
     import pytz
     try:

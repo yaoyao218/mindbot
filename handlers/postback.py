@@ -213,11 +213,14 @@ async def handle_checkin_action(
     if choice == "dialog":
         method = EMOTION_TO_METHOD.get(emotion, "BYRON_KATIE")
         session.pop("pending_checkin", None)
-        session["in_dialog"] = True
-        session["method"] = method
-        session["step"] = -1   # pre-step：等待用戶說出核心困擾
-        session["core_belief"] = None
-        session["history"] = []
+        session["in_dialog"]         = True
+        session["method"]            = method
+        session["step"]              = -1
+        session["core_belief"]       = None
+        session["history"]           = []
+        session["total_turn"]        = 0
+        session["psych"]             = {}
+        session["closing_shown_date"] = None
         await save_session(user_id, session)
 
         await line_bot_api.reply_message(
@@ -424,9 +427,14 @@ async def handle_set_context(
     """
     value = params.get("value", "deep")
     session = await _get_session(user_id)
-    session["current_context"] = value
-    session["in_dialog"]       = True
-    session["history"]         = session.get("history", [])
+    # 開啟新對話：強制清空 history，防止上一場對話的語境污染這一場的第一輪
+    session["current_context"]   = value
+    session["in_dialog"]         = True
+    session["history"]           = []
+    session["total_turn"]        = 0
+    session["quick_closed"]      = False
+    session["psych"]             = {}
+    session["closing_shown_date"] = None
     await _save_session(user_id, session)
 
     if value == "quick":
