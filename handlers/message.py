@@ -773,9 +773,9 @@ async def send_welcome(reply_token: str, line_bot_api: MessagingApi):
                         "label": "📊 開啟我的心事日記 ✦",
                         "uri": f"{liff_url}#dashboard",
                     },
-                    "style": "secondary",
+                    "style": "primary",   # primary = 實心填色，文字白色，清晰可見
                     "margin": "lg",
-                    "color": "#131a26",
+                    "color": "#6366f1",   # indigo，對齊標題色，在深色背景上清楚顯示
                     "height": "sm",
                 },
 
